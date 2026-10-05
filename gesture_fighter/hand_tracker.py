@@ -64,7 +64,6 @@ class HandTracker:
         self.split = split
         self.mirror = mirror
         self.max_hands = max_hands
-        self.slots = 2 if split else 1
 
         self._lock = threading.Lock()
         self._thread = None
@@ -75,9 +74,10 @@ class HandTracker:
         self._frame = None
         self._frame_id = 0
         self._hands = {}
-        self._filters = [GestureFilter() for _ in range(self.slots)]
-        self._last_seen = [None] * self.slots
-        self._lost = [LOST_AFTER] * self.slots
+        # Her zaman 2 slot ayrılır; split ayarı oyun sırasında set_split() ile değişebilir
+        self._filters = [GestureFilter() for _ in range(2)]
+        self._last_seen = [None] * 2
+        self._lost = [LOST_AFTER] * 2
         self.fps = 0.0
         self.error = None
 
@@ -117,6 +117,20 @@ class HandTracker:
         self._thread = threading.Thread(target=self._loop, name="HandTracker", daemon=True)
         self._thread.start()
         return True, "Kamera hazır"
+
+    @property
+    def slots(self):
+        return 2 if self.split else 1
+
+    def set_split(self, split):
+        """Tek oyuncu (en büyük el) / iki oyuncu (sol-sağ yarı) modları arasında geçiş."""
+        with self._lock:
+            self.split = split
+            for f in self._filters:
+                f.reset()
+            self._last_seen = [None] * 2
+            self._lost = [LOST_AFTER] * 2
+            self._hands = {}
 
     def stop(self):
         self._running = False
