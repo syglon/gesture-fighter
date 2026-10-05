@@ -1,0 +1,6 @@
+.venv/
+__pycache__/
+*.pyc
+# El modeli ilk çalıştırmada otomatik indiriliyor
+models/
+*.part
