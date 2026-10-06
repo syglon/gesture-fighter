@@ -47,6 +47,21 @@ KEYMAP_P1 = {
 }
 
 
+# İki kişilik modda klavye (kamerasız test için): P1 soldaki oyuncu, P2 sağdaki
+KEYMAP_VS_P1 = {
+    "gestures": {Gesture.FIST: (pygame.K_1,), Gesture.PALM: (pygame.K_2,),
+                 Gesture.POINT: (pygame.K_3,), Gesture.PEACE: (pygame.K_4,)},
+    "up": (pygame.K_w,),
+    "down": (pygame.K_s,),
+}
+KEYMAP_VS_P2 = {
+    "gestures": {Gesture.FIST: (pygame.K_7, pygame.K_KP1), Gesture.PALM: (pygame.K_8, pygame.K_KP2),
+                 Gesture.POINT: (pygame.K_9, pygame.K_KP3), Gesture.PEACE: (pygame.K_0, pygame.K_KP4)},
+    "up": (pygame.K_UP,),
+    "down": (pygame.K_DOWN,),
+}
+
+
 class KeyboardController:
     """Kamera olmadan test/yedek: tuşa basılı tutmak = hareketi tutmak."""
 

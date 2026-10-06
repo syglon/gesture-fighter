@@ -26,15 +26,20 @@ class Projectile:
         self.kind = kind            # punch | fire | reflect | orb | missile | wall
         self.color = color
         self.homing = homing
+        self.shooter = None     # mermiyi atan oyuncu (istatistik / versus)
+        self.target = None      # güdümlü füzenin hedefi
         self.alive = True
         self.age = 0.0
         self.trail = deque(maxlen=9)
 
     def update(self, dt, game):
         self.age += dt
-        if self.homing and game.player is not None and self.age > 0.25:
-            desired = max(-260.0, min(260.0, (game.player.y - self.y) * 2.2))
-            self.vy += (desired - self.vy) * min(1.0, self.homing * dt)
+        if self.homing and self.age > 0.25:
+            if self.target is None or self.target.hp <= 0:
+                self.target = game.pick_target()
+            if self.target is not None:
+                desired = max(-260.0, min(260.0, (self.target.y - self.y) * 2.2))
+                self.vy += (desired - self.vy) * min(1.0, self.homing * dt)
         self.trail.append((self.x, self.y))
         self.x += self.vx * dt
         self.y += self.vy * dt
@@ -98,8 +103,8 @@ class Laser:
         self.color = color
         self.t = 0.0
         self.alive = True
-        self.hit_player = False
-        self.blocked_once = False
+        self.hit = set()         # vurduğu oyuncular (id)
+        self.blocked_by = set()  # kalkanla karşılayan oyuncular (id)
         self.started = False
 
     @property
@@ -147,6 +152,7 @@ class SpecialBeam:
         self.alive = True
         self.half_h = 46
         self.dmg_accum = 0.0
+        self.color = C.C_SPECIAL
 
     @property
     def y(self):
@@ -173,7 +179,8 @@ class SpecialBeam:
         hh = self.half_h * (0.6 + 0.4 * inten)
         layer = pygame.Surface((w, int(hh * 3) + 2))
         lh = layer.get_height()
-        cols = ((1.5, scale_color((255, 120, 20), 0.5 * inten)), (1.0, scale_color(C.C_SPECIAL, inten)),
+        cols = ((1.5, scale_color((255, 120, 20), 0.5 * inten)),
+                (1.0, scale_color(self.color, inten)),
                 (0.5, scale_color((255, 255, 230), inten)))
         for frac, col in cols:
             pts_top, pts_bot = [], []
@@ -185,7 +192,7 @@ class SpecialBeam:
             pygame.draw.polygon(layer, col, pts_top + pts_bot[::-1])
         left = x0 if self.owner.facing > 0 else x1
         surf.blit(layer, (left, int(self.y - lh / 2)), special_flags=pygame.BLEND_ADD)
-        blit_glow(surf, (x0, self.y), hh * 2.6, scale_color(C.C_SPECIAL, inten))
+        blit_glow(surf, (x0, self.y), hh * 2.6, scale_color(self.color, inten))
 
 
 # ====================================================================== fighter
@@ -342,7 +349,7 @@ ATTACK_COLORS = {"orb": (190, 110, 255), "burst": (190, 110, 255), "spread": (25
 
 class Boss:
     def __init__(self, difficulty="normal"):
-        self.diff = C.DIFFICULTY[difficulty]
+        self.diff = dict(C.DIFFICULTY[difficulty])
         self.max_hp = C.BOSS_MAX_HP
         self.hp = self.ghost_hp = float(self.max_hp)
         self.home_x = C.BOSS_X
@@ -361,6 +368,7 @@ class Boss:
         self.flash = 0.0
         self.hit_shake = 0.0
         self.ghost_delay = 0.0
+        self.target = None  # şu an nişan alınan oyuncu
 
     # ------------------------------------------------------------------
     @property
@@ -378,6 +386,11 @@ class Boss:
     def set_state(self, s):
         self.state = s
         self.state_t = 0.0
+
+    def _target(self, game):
+        if self.target is None or self.target.hp <= 0:
+            self.target = game.pick_target()
+        return self.target
 
     def take_damage(self, dmg):
         self.hp = max(0.0, self.hp - dmg)
@@ -409,8 +422,9 @@ class Boss:
             target = self.mid_y
         else:
             target = self.mid_y + amp * math.sin(self.t * spd)
-            if game.player is not None:
-                target = lerp(target, game.player.y, follow)
+            tgt = self._target(game)
+            if tgt is not None:
+                target = lerp(target, tgt.y, follow)
         if self.state == "windup":
             target = self.y  # saldırı hazırlarken sabit dur
         self.y += (target - self.y) * min(1.0, dt * 2.5)
@@ -430,6 +444,7 @@ class Boss:
             self.attack_cd -= dt
             if self.attack_cd <= 0:
                 self.current = self._choose()
+                self.target = game.pick_target()
                 self.set_state("windup")
                 game.sound.play("blip", 0.5)
         elif self.state == "windup":
@@ -467,7 +482,9 @@ class Boss:
     # ------------------------------------------------------------------ attacks
     def _shoot(self, game, angle_offset_deg=0.0, speed=430, dmg=8, radius=15, kind="orb", color=None, homing=0.0):
         ex, ey = self.emitter
-        p = game.player
+        p = self._target(game)
+        if p is None:
+            return
         ang = math.atan2(p.y - ey, p.x - ex) + math.radians(angle_offset_deg)
         speed *= self.diff["speed"]
         game.spawn(Projectile(ex, ey, math.cos(ang) * speed, math.sin(ang) * speed, radius,
@@ -479,7 +496,9 @@ class Boss:
         game.sound.play("laser_warn")
 
     def _execute(self, name, game):
-        p = game.player
+        p = self._target(game)
+        if p is None:
+            return
         if name == "orb":
             self._shoot(game)
             game.sound.play("boss_shot")
@@ -498,15 +517,16 @@ class Boss:
             self._laser(game, p.y, 0.95 if self.phase == 1 else 0.8)
         elif name == "double_laser":
             self._laser(game, p.y, 0.85)
-            self.queue.append([0.7, lambda: self._laser(game, game.player.y, 0.8)])
+            self.queue.append([0.7, lambda: self._target(game) and self._laser(game, self._target(game).y, 0.8)])
         elif name == "missile":
             n = 2 if self.phase == 2 else 3
             ex, ey = self.emitter
             for i in range(n):
                 vy = (-1 if i % 2 == 0 else 1) * random.uniform(180, 280)
-                game.spawn(Projectile(ex, ey + vy * 0.1, -260 * self.diff["speed"], vy, 13,
-                                      12 * self.diff["damage"], "boss", "missile", ATTACK_COLORS["missile"],
-                                      homing=2.0))
+                m = Projectile(ex, ey + vy * 0.1, -260 * self.diff["speed"], vy, 13,
+                               12 * self.diff["damage"], "boss", "missile", ATTACK_COLORS["missile"], homing=2.0)
+                m.target = p if i % 2 == 0 else game.pick_target()
+                game.spawn(m)
             game.sound.play("boss_shot")
         elif name == "wall":
             gap = random.uniform(C.PLAYER_Y_MIN, C.PLAYER_Y_MAX)
@@ -560,7 +580,7 @@ class Boss:
         windup = self.state == "windup"
         sclera = (235, 235, 245) if not windup else (255, 255, 255)
         pygame.draw.circle(surf, sclera, (x, y), eye_r)
-        p = game.player
+        p = self.target if self.target is not None and self.target.hp > 0 else None
         ang = math.atan2((p.y if p else y) - y, (p.x if p else 0) - x)
         ix, iy = x + math.cos(ang) * eye_r * 0.38, y + math.sin(ang) * eye_r * 0.38
         icol = ATTACK_COLORS.get(self.current, col) if windup else col

@@ -49,6 +49,21 @@ COMBO_WINDOW = 2.2
 COMBO_BONUS_PER_HIT = 0.05
 COMBO_BONUS_MAX = 0.5
 
+# ---------------- İki kişilik VERSUS (P1 sol, P2 sağ) ----------------
+P1_COLOR = (90, 220, 255)
+P2_COLOR = (255, 110, 200)
+VS_P1_X = 170
+VS_P2_X = SCREEN_W - 170
+VS_ROUND_TIME = 60          # saniye
+VS_MAX_HP = 150             # versus'ta oyuncu canı (raunt daha uzun sürsün)
+VS_ROUNDS_TO_WIN = 2        # 3 rauntta 2 kazanan
+VS_SPECIAL_DPS = 34         # rakibe karşı özel ışın (boss'a göre daha zayıf)
+VS_BEAM_BLOCK_DRAIN = 45    # kalkanla ışın karşılarken enerji kaybı /sn
+VS_BEAM_CHIP = 0.15         # kalkan açıkken ışından geçen hasar oranı
+VS_SPECIAL_GAIN_DEALT = 1.4 # verilen hasar başına özel bar
+VS_SPECIAL_GAIN_TAKEN = 0.7 # alınan hasar başına özel bar
+VS_REFLECT_MULT = 1.5       # parry ile geri gönderilen mermi hasarı
+
 # ---------------- Boss ----------------
 BOSS_X = 1060
 BOSS_MAX_HP = 650

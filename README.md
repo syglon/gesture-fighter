@@ -13,6 +13,20 @@ Kamera el hareketlerinizi algılar (MediaPipe Hand Landmarker), siz de **OVERLOR
 Hareketi **yeni yaptığında** saldırı hemen çıkar; hareketi tutarsan daha yavaş bir hızla tekrarlar.
 Yani hızlı yumruk için eli açıp kapamak (✊→🖐️→✊) en etkili yol.
 
+## ⚔️ İki kişilik VERSUS
+
+Menüde **✌️ iki parmağı 1 sn tut** (veya `V` tuşu, ya da `--versus` ile başlat). İki oyuncu karşı karşıya dövüşür:
+
+- Kamera ikiye bölünür: **görüntünün sol yarısındaki el P1 (solda, mavi), sağ yarısındaki el P2 (sağda, pembe)**.
+  Yan yana durun, herkes kendi tarafında elini göstersin. Eli yukarı/aşağı oynatmak karakteri hareket ettirir.
+- Aynı 4 hareket: ✊ yumruk, 🖐️ kalkan (tam zamanında açarsan **PARRY** — mermi rakibe geri döner), ☝️ ateş topu, ✌️ özel ışın.
+- Karşılaşan mermiler çarpışır: ateş topu yumruğu yener, parry ile dönen mermi ikisini de yener.
+- Özel ışın rakibe kilitlenmez — elinle ışını rakibin hizasına getirmen gerekir. Kalkan ışını büyük ölçüde durdurur ama enerjiyi hızla eritir.
+- Her raunt 60 sn, can 150. **3 rauntta 2 kazanan** maçı alır. Süre biterse canı fazla olan raundu alır.
+- Sonda iki oyuncunun istatistikleri yan yana gösterilir (hasar, isabet, parry, kombo, özel).
+
+Klavye (kamerasız test): **P1** `1 2 3 4` (yumruk, kalkan, ateş, özel) + `W/S` — **P2** `7 8 9 0` + `↑/↓`.
+
 ## Kurulum
 
 ```bash
@@ -31,6 +45,7 @@ El modeli (`models/hand_landmarker.task`, ~7.5 MB) yoksa ilk açılışta otomat
 .venv/bin/python webcam_game.py --fullscreen
 .venv/bin/python webcam_game.py --keyboard            # kamerasız test (1-4 hareketler, W/S hareket)
 .venv/bin/python webcam_game.py --mute
+.venv/bin/python webcam_game.py --versus            # doğrudan iki kişilik maç
 ```
 
 Oyun içi: `ESC/P` duraklat · `F11` tam ekran · `F1` debug (FPS, ham hareket, parmak durumları) · `M` ses.
@@ -65,16 +80,6 @@ bilek→parmak ucu / bilek→orta eklem mesafe oranı ve eklemdeki bükülme aç
 Bu iki ölçüt elin dönmesinden ve kameraya uzaklığından bağımsız. Açık parmak sayısı + hangileri açık olduğu
 hareketi belirliyor. Başparmak en gürültülü parmak olduğu için kullanılmıyor. Son 4 karenin
 en az 3'ünde aynı hareket görülürse kararlı kabul ediliyor (titreme önleme).
-
-## İki kişilik mod için hazırlık
-
-Kod zaten buna göre kurulu:
-
-- `HandTracker(split=True)` → görüntünün sol yarısındaki el `slot 0`, sağ yarısındaki el `slot 1`.
-- `HandController(tracker, slot=1)` → ikinci oyuncunun kontrolcüsü.
-- `Fighter(x=..., facing=-1)` → sağ tarafta, sola bakan ikinci oyuncu (mermiler `facing` yönünde gider).
-- Yapılması gereken: `game.py`'de boss yerine ikinci `Fighter`'ı koymak ve çarpışmalarda
-  `owner` alanını `"p1"/"p2"` olarak ayırmak.
 
 ## İpuçları (demo için)
 

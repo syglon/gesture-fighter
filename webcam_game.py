@@ -12,6 +12,7 @@ Elinizi yukarı/aşağı hareket ettirerek karakteri hareket ettirirsiniz.
     .venv/bin/python webcam_game.py
     .venv/bin/python webcam_game.py --camera 1 --difficulty hard --fullscreen
     .venv/bin/python webcam_game.py --keyboard      # kamerasız test
+    .venv/bin/python webcam_game.py --versus        # iki kişilik kapışma (kamera ikiye bölünür)
 """
 import argparse
 import sys
@@ -24,6 +25,7 @@ def parse_args(argv=None):
     ap.add_argument("--camera", type=int, default=0, help="kamera indeksi (varsayılan 0)")
     ap.add_argument("--keyboard", action="store_true", help="kamerayı kullanma, sadece klavye")
     ap.add_argument("--difficulty", choices=["easy", "normal", "hard"], default="normal")
+    ap.add_argument("--versus", action="store_true", help="iki kişilik versus ile başla (menüde de seçilebilir)")
     ap.add_argument("--fullscreen", action="store_true")
     ap.add_argument("--mute", action="store_true", help="sesleri kapat")
     ap.add_argument("--no-mirror", action="store_true", help="kamera görüntüsünü aynalama")
