@@ -18,6 +18,7 @@ class Gesture(Enum):
     PALM = 2   # 🖐 Shield
     POINT = 3  # ☝ Fire
     PEACE = 4  # ✌ Special
+    MIRROR = 5  # 🤟 Mirror (sadece versus)
 
 
 GESTURE_ACTION = {
@@ -26,6 +27,7 @@ GESTURE_ACTION = {
     Gesture.PALM: "SHIELD",
     Gesture.POINT: "FIRE",
     Gesture.PEACE: "SPECIAL",
+    Gesture.MIRROR: "MIRROR",
 }
 
 GESTURE_HAND = {
@@ -34,6 +36,7 @@ GESTURE_HAND = {
     Gesture.PALM: "Open palm",
     Gesture.POINT: "Index finger",
     Gesture.PEACE: "Two fingers",
+    Gesture.MIRROR: "Index + pinky",
 }
 
 GESTURE_COLOR = {
@@ -42,6 +45,7 @@ GESTURE_COLOR = {
     Gesture.PALM: C.C_SHIELD,
     Gesture.POINT: C.C_FIRE,
     Gesture.PEACE: C.C_SPECIAL,
+    Gesture.MIRROR: C.C_MIRROR,
 }
 
 # MediaPipe el topolojisi (çizim için)
@@ -105,6 +109,8 @@ def classify(pts):
         return Gesture.POINT
     if index and middle and not ring and not pinky:
         return Gesture.PEACE
+    if index and pinky and not middle and not ring:
+        return Gesture.MIRROR  # 🤟 / 🤘 (başparmak yine yok sayılır)
     return Gesture.NONE
 
 

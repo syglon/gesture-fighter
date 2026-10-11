@@ -11,8 +11,8 @@ PLAYER_Y_MIN = ARENA_TOP + 60
 PLAYER_Y_MAX = ARENA_BOTTOM - 60
 
 # Kameradaki elin dikey konumu bu aralıkta haritalanır (0 = üst, 1 = alt)
-HAND_Y_MIN = 0.22
-HAND_Y_MAX = 0.78
+HAND_Y_MIN = 0.2
+HAND_Y_MAX = 0.8
 
 # Kamera
 CAMERA_W, CAMERA_H = 640, 480
@@ -64,6 +64,15 @@ VS_SPECIAL_GAIN_DEALT = 1.4 # verilen hasar başına özel bar
 VS_SPECIAL_GAIN_TAKEN = 0.7 # alınan hasar başına özel bar
 VS_REFLECT_MULT = 1.5       # parry ile geri gönderilen mermi hasarı
 
+# AYNA (🤟 işaret + serçe) — sadece versus: ortaya bir ayna koyar, rakibin mermilerini ona geri yansıtır
+MIRROR_ENERGY = 40          # enerji bedeli
+MIRROR_DURATION = 3.0       # aynanın açık kaldığı süre (sn)
+MIRROR_COOLDOWN = 8.0       # tekrar kullanmak için bekleme (sn, kullanıldığı andan itibaren)
+MIRROR_OFFSET = 60          # ayna, ekranın ortasından sahibinin tarafına bu kadar piksel kayık
+MIRROR_DAMAGE_MULT = 1.2    # yansıyan mermi hasarı çarpanı
+MIRROR_SPEED_MULT = 1.1     # yansıyan mermi hız çarpanı
+MIRROR_MAX_BOUNCES = 4      # iki ayna arasında sonsuz sekme olmasın
+
 # ---------------- Boss ----------------
 BOSS_X = 1060
 BOSS_MAX_HP = 650
@@ -83,6 +92,7 @@ BLACK = (0, 0, 0)
 C_PUNCH = (255, 220, 140)
 C_SHIELD = (90, 220, 255)
 C_FIRE = (255, 120, 40)
+C_MIRROR = (200, 175, 255)
 C_SPECIAL = (255, 210, 60)
 C_PARRY = (255, 240, 120)
 C_HP = (80, 230, 120)

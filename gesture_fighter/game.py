@@ -17,7 +17,7 @@ from .controls import (KEYMAP_VS_P1, KEYMAP_VS_P2, CombinedController, ControlSt
                        KeyboardController)
 from .draw import (Fonts, bar, blit_glow, build_background, gesture_icon, lerp, lerp_color, panel,
                    scale_color, text)
-from .entities import Boss, Fighter, Projectile, SpecialBeam, circle_rect_hit
+from .entities import Boss, Fighter, Mirror, Projectile, SpecialBeam, circle_rect_hit
 from .fx import FloatingText, Particles, Shake
 from .gestures import GESTURE_ACTION, GESTURE_COLOR, GESTURE_HAND, HAND_CONNECTIONS, Gesture
 
@@ -30,13 +30,15 @@ TIPS = [
     "Land hits in a row to build a COMBO damage bonus.",
     "Two fingers unleash the SPECIAL beam when the gold bar is full.",
     "VERSUS: fireballs beat punches — and a parry sends them straight back.",
+    "VERSUS: index + pinky puts up a MIRROR that sends enemy shots back for 3 seconds.",
 ]
 DIFFS = ["easy", "normal", "hard"]
 CLASH_RANK = {"punch": 0, "fire": 1, "reflect": 2}  # versus: çarpışan mermilerden güçlü olan devam eder
 
 
 def new_stats():
-    return dict(shots=0, hits=0, parries=0, blocks=0, dmg_taken=0.0, max_combo=0, specials=0, damage=0.0)
+    return dict(shots=0, hits=0, parries=0, blocks=0, dmg_taken=0.0, max_combo=0, specials=0, damage=0.0,
+                mirrors=0, reflects=0)
 
 
 class Game:
@@ -108,6 +110,10 @@ class Game:
         self.state_t = 0.0
         self.holds = {}
         self.armed = set()  # el önce bırakılmalı (kalkanı tutarken kazara yeniden başlamasın)
+        self.sound.play_music(self.music_for_state())
+
+    def music_for_state(self):
+        return "battle" if self.state in ("countdown", "fight", "round_end") else "menu"
 
     def new_match(self):
         n = 2 if self.versus else 1
@@ -132,6 +138,7 @@ class Game:
             p.stats = st  # istatistikler raunt boyunca birikir
         self.projectiles = []
         self.lasers = []
+        self.mirrors = []
         self.texts = []
         self.particles.clear()
         self.fight_time = 0.0
@@ -185,6 +192,10 @@ class Game:
                     pygame.display.toggle_fullscreen()
                 elif k == pygame.K_m:
                     self.sound.enabled = not self.sound.enabled and bool(self.sound.sounds)
+                    if self.sound.enabled:
+                        self.sound.play_music(self.music_for_state())
+                    else:
+                        self.sound.stop_music()
                 elif self.state == "title":
                     if k == pygame.K_ESCAPE:
                         self.running = False
@@ -200,6 +211,7 @@ class Game:
                 elif self.state in ("fight", "countdown", "round_end"):
                     if k in (pygame.K_ESCAPE, pygame.K_p):
                         self.paused = not self.paused
+                        self.sound.pause_music(self.paused)
                     elif k == pygame.K_q and self.paused:
                         self.go_title()
                 elif self.state in ("victory", "defeat", "match_end"):
@@ -210,6 +222,7 @@ class Game:
 
     def go_title(self):
         self.paused = False
+        self.sound.pause_music(False)
         self.set_mode("solo")
         self.new_match()
         self.boss.x = self.boss.home_x
@@ -218,6 +231,7 @@ class Game:
 
     def start_match(self, mode):
         self.paused = False
+        self.sound.pause_music(False)
         if mode != self.mode:
             self.set_mode(mode)
         self.new_match()
@@ -330,6 +344,10 @@ class Game:
         for L in self.lasers:
             L.update(dt)
         if self.versus:
+            for m in self.mirrors:
+                m.update(dt)
+            self.mirrors = [m for m in self.mirrors if m.alive]
+            self.mirror_reflect()
             self.collide_versus()
             for p in self.players:
                 self.update_beam_versus(p, dt)
@@ -435,6 +453,8 @@ class Game:
             p.pending = None
         if g is Gesture.PEACE and entered:
             self.try_special(p)
+        if g is Gesture.MIRROR and entered:
+            self.try_mirror(p)
 
     def player_attack(self, p, g):
         spec = C.PUNCH if g is Gesture.FIST else C.FIRE
@@ -481,6 +501,41 @@ class Game:
             self.notify(f"special{p.name}", f"SPECIAL {int(p.special)}%", p.x + p.facing * 30, p.y - 100,
                         C.C_SPECIAL)
             self.sound.play("fizzle")
+
+    def try_mirror(self, p):
+        """🤟: rakip mermilerini geri yansıtan aynayı ortaya koyar (sadece versus)."""
+        if not self.versus:
+            self.notify(f"mirror{p.name}", "MIRROR: 2-player only", p.x + 30, p.y - 100, C.C_MIRROR)
+            return
+        if p.mirror_cd > 0:
+            self.notify(f"mirror{p.name}", f"MIRROR {int(math.ceil(p.mirror_cd))}s", p.x + p.facing * 30,
+                        p.y - 100, C.C_MIRROR)
+            self.sound.play("fizzle")
+            return
+        if p.energy < C.MIRROR_ENERGY:
+            self.notify(f"noenergy{p.name}", "NO ENERGY", p.x, p.y - 100, C.C_ENERGY)
+            self.sound.play("fizzle")
+            return
+        p.energy -= C.MIRROR_ENERGY
+        p.energy_delay = max(p.energy_delay, 0.6)
+        p.mirror_cd = C.MIRROR_COOLDOWN
+        p.shield_on = False
+        x = W / 2 - p.facing * C.MIRROR_OFFSET
+        self.mirrors.append(Mirror(p, x))
+        p.stats["mirrors"] += 1
+        self.sound.play("mirror_cast")
+        self.shake.add(6)
+        # elden aynaya uçan kıvılcımlar + aynanın boyunca parıltı
+        hx, hy = p.hand_pos
+        for _ in range(26):
+            self.particles.emit(hx, hy, (x - hx) * random.uniform(1.2, 2.2), random.uniform(-160, 160),
+                                random.choice([C.C_MIRROR, (255, 255, 255), p.color]), life=random.uniform(0.3, 0.6),
+                                size=random.uniform(2, 4), drag=2.5)
+        for _ in range(40):
+            self.particles.emit(x + random.uniform(-14, 14), random.uniform(Mirror.TOP, Mirror.BOTTOM),
+                                random.uniform(-90, 90), random.uniform(-60, 60), C.C_MIRROR,
+                                life=random.uniform(0.3, 0.8), size=random.uniform(2, 4))
+        self.texts.append(FloatingText(x, C.ARENA_TOP + 30, "MIRROR!", C.C_MIRROR, self.fonts.big, 1.1))
 
     def guard_break(self, p):
         p.energy = 0.0
@@ -805,6 +860,40 @@ class Game:
                 if pr.kind in ("fire", "reflect"):
                     self.hitstop = max(self.hitstop, 0.08)
 
+    def mirror_reflect(self):
+        """Aktif aynaya, sahibine doğru gelen rakip mermileri geri döner ve aynanın sahibine ait olur."""
+        for m in self.mirrors:
+            if not m.active:
+                continue
+            owner = m.owner
+            side = 1 if owner.x > m.x else -1  # sahibinin aynaya göre tarafı
+            for pr in self.projectiles:
+                if not pr.alive or pr.shooter is None or pr.shooter is owner:
+                    continue
+                if not (Mirror.TOP <= pr.y <= Mirror.BOTTOM) or pr.vx * side <= 0:
+                    continue
+                if abs(pr.x - m.x) > pr.radius + 15:
+                    continue
+                pr.vx = -pr.vx * C.MIRROR_SPEED_MULT
+                pr.x = m.x - side * (pr.radius + 16)
+                pr.shooter = owner
+                pr.damage *= C.MIRROR_DAMAGE_MULT
+                pr.color = C.C_MIRROR
+                pr.trail.clear()
+                pr.bounces = getattr(pr, "bounces", 0) + 1
+                if pr.bounces > C.MIRROR_MAX_BOUNCES:
+                    pr.alive = False
+                m.hit(pr.y)
+                owner.stats["reflects"] += 1
+                self.sound.play("mirror_hit", 0.8)
+                self.shake.add(4)
+                self.hitstop = max(self.hitstop, 0.04)
+                self.particles.burst(m.x, pr.y, C.C_MIRROR, n=22, speed=(100, 420), life=(0.15, 0.45),
+                                     angle=0 if side < 0 else math.pi, spread=2.2)
+                self.particles.burst(m.x, pr.y, (255, 255, 255), n=8, speed=(60, 200), life=(0.1, 0.3))
+                self.notify(f"reflect{owner.name}", "REFLECT!", m.x, pr.y - 50, C.C_MIRROR, cooldown=0.35,
+                            font=self.fonts.mid)
+
     def update_beam_versus(self, p, dt):
         beam = p.beam
         if beam is None:
@@ -816,12 +905,24 @@ class Game:
         self.beam_particles(p, beam)
         y, x0 = beam.y, beam.x0
         opp = self.opponent(p)
+        # rakibin aynası ışını keser: ışın aynada biter, rakip hasar almaz
+        wall = next((m for m in self.mirrors if m.owner is opp and m.active and (m.x - x0) * p.facing > 0), None)
+        beam.stop_x = wall.x if wall else None
         # ışın, rakibin mermilerini yok eder
         for pr in self.projectiles:
             if pr.alive and pr.shooter is opp and abs(pr.y - y) < beam.half_h + pr.radius and \
-                    (pr.x - x0) * p.facing > 0:
+                    (pr.x - x0) * p.facing > 0 and (wall is None or (wall.x - pr.x) * p.facing > 0):
                 pr.alive = False
                 self.particles.burst(pr.x, pr.y, pr.color, n=8, speed=(60, 200), life=(0.1, 0.3))
+        if wall is not None:
+            wall.hit(y)
+            if random.random() < 0.6:
+                self.particles.emit(wall.x, y + random.uniform(-30, 30), -p.facing * random.uniform(80, 300),
+                                    random.uniform(-220, 220), random.choice([C.C_MIRROR, beam.color]),
+                                    life=0.35, size=3)
+            if random.random() < 0.08:
+                self.sound.play("mirror_hit", 0.4)
+            return
         if self.end_kind is not None or opp.hp <= 0 or abs(opp.y - y) > beam.half_h + 45:
             return
         dmg = beam.dps * dt * self.combo_mult(p)
@@ -862,6 +963,8 @@ class Game:
         for p in self.players:
             p.beam = None
             p.shield_on = False
+        for m in self.mirrors:  # raunt bitince aynalar sönsün
+            m.duration = min(m.duration, m.t + 0.4)
         perfect = winner.hp >= winner.max_hp
         title = banner or ("PERFECT!" if perfect else "K.O.!")
         self.show_banner(title, f"{winner.name} wins round {self.round}", winner.color, 2.6)
@@ -940,6 +1043,8 @@ class Game:
                 p.draw(w, self.fonts)
             if self.versus and p.hp > 0:
                 text(w, self.fonts.tiny, p.name, (p.x, p.y - 96), p.color)
+        for m in self.mirrors:
+            m.draw(w)
         for p in self.players:
             if p.beam is not None:
                 p.beam.draw(w)
@@ -990,6 +1095,15 @@ class Game:
                 won = self.wins[k] > i
                 pygame.draw.circle(s, (20, 14, 30), (x, r.bottom + 18), 11)
                 pygame.draw.circle(s, p.color if won else (70, 64, 90), (x, r.bottom + 18), 8)
+            # ayna hazır mı?
+            ready = p.mirror_cd <= 0 and p.energy >= C.MIRROR_ENERGY
+            label = "MIRROR READY" if ready else (f"MIRROR {int(math.ceil(p.mirror_cd))}s" if p.mirror_cd > 0
+                                                  else "MIRROR: energy")
+            mcol = C.C_MIRROR if ready else (130, 124, 150)
+            ix = r.x + 98 if k == 0 else r.right - 98
+            gesture_icon(s, Gesture.MIRROR, (ix, r.bottom + 18), 20, mcol)
+            text(s, f.tiny, label, (ix + 16 if k == 0 else ix - 16, r.bottom + 18), mcol,
+                 "midleft" if k == 0 else "midright")
         self.draw_preview(pygame.Rect(W // 2 - 130, 8, 260, 195))
         box = pygame.Rect(W // 2 - 44, 212, 88, 44)
         panel(s, box, color=(20, 14, 30), alpha=230, border=(230, 230, 250), radius=8)
@@ -1057,9 +1171,10 @@ class Game:
 
     def draw_legend(self, y):
         s, f = self.screen, self.fonts
-        cw, gap = 250, 12
-        x0 = (W - (4 * cw + 3 * gap)) // 2
-        for i, g in enumerate(LEGEND):
+        cards = LEGEND + [Gesture.MIRROR] if self.versus else LEGEND
+        cw, gap = (250, 12) if len(cards) == 4 else (232, 10)
+        x0 = (W - (len(cards) * cw + (len(cards) - 1) * gap)) // 2
+        for i, g in enumerate(cards):
             r = pygame.Rect(x0 + i * (cw + gap), y, cw, 44)
             users = [p for p in self.players if p.gesture is g and p.hp > 0]
             active = bool(users)
@@ -1077,6 +1192,8 @@ class Game:
                 hint += f"  · {int(self.players[0].special)}%"
             elif g is Gesture.PALM:
                 hint += "  · parry!"
+            elif g is Gesture.MIRROR:
+                hint += f" · {C.MIRROR_ENERGY} EN"
             text(s, f.tiny, hint, (r.x + 53, r.y + 25), (190, 190, 210), "topleft", shadow=False)
             if self.versus:
                 for k, p in enumerate(users):
@@ -1090,8 +1207,8 @@ class Game:
         if self.tracker is None:
             text(s, f.small, "KEYBOARD MODE", (rect.centerx, rect.y + 24), C.C_SPECIAL)
             if self.versus:
-                lines = ["P1: 1 2 3 4  ·  W / S", "P2: 7 8 9 0  ·  ↑ / ↓",
-                         "(punch · shield · fire · special)"]
+                lines = ["P1: 1 2 3 4 5  ·  W / S", "P2: 7 8 9 0 -  ·  ↑ / ↓",
+                         "punch · shield · fire · special · mirror"]
             else:
                 lines = ["1 / J : Punch", "2 / K : Shield", "3 / L : Fire", "4 / ; : Special", "W S / ↑ ↓ : Move"]
             for i, ln in enumerate(lines):
@@ -1277,7 +1394,7 @@ class Game:
         self._end_overlay()
         a, b = self.wins
         winner = self.players[0] if a > b else self.players[1]
-        r = pygame.Rect(0, 0, 680, 450)
+        r = pygame.Rect(0, 0, 680, 490)
         r.center = (W // 2, H // 2 + 10)
         panel(s, r, color=(16, 12, 30), alpha=235, border=winner.color, radius=14, width=3)
         blit_glow(s, (r.centerx, r.y + 52), 200, scale_color(winner.color, 0.35))
@@ -1293,7 +1410,8 @@ class Game:
                 ("Accuracy", acc),
                 ("Parries / Blocks", lambda st: f"{st['parries']} / {st['blocks']}"),
                 ("Max combo", lambda st: str(st["max_combo"])),
-                ("Specials", lambda st: str(st["specials"]))]
+                ("Specials", lambda st: str(st["specials"])),
+                ("Mirrors / Reflects", lambda st: f"{st['mirrors']} / {st['reflects']}")]
         cols_x = [r.right - 230, r.right - 90]
         for k, p in enumerate(self.players):
             text(s, f.mid, p.name, (cols_x[k], r.y + 146), p.color)

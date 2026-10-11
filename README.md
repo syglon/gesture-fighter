@@ -20,12 +20,15 @@ Menüde **✌️ iki parmağı 1 sn tut** (veya `V` tuşu, ya da `--versus` ile 
 - Kamera ikiye bölünür: **görüntünün sol yarısındaki el P1 (solda, mavi), sağ yarısındaki el P2 (sağda, pembe)**.
   Yan yana durun, herkes kendi tarafında elini göstersin. Eli yukarı/aşağı oynatmak karakteri hareket ettirir.
 - Aynı 4 hareket: ✊ yumruk, 🖐️ kalkan (tam zamanında açarsan **PARRY** — mermi rakibe geri döner), ☝️ ateş topu, ✌️ özel ışın.
+- **Sadece versus'ta 5. hareket — 🤟 AYNA (işaret + serçe açık):** 40 enerjiye ortaya 3 saniyelik bir ayna koyar. Rakibin o tarafa attığı mermiler ×1.2 hasarla rakibe geri yansır, rakibin özel ışını aynada durur. Kendi mermilerin aynadan geçer. 8 saniye bekleme süresi var (panelde "MIRROR READY").
 - Karşılaşan mermiler çarpışır: ateş topu yumruğu yener, parry ile dönen mermi ikisini de yener.
 - Özel ışın rakibe kilitlenmez — elinle ışını rakibin hizasına getirmen gerekir. Kalkan ışını büyük ölçüde durdurur ama enerjiyi hızla eritir.
 - Her raunt 60 sn, can 150. **3 rauntta 2 kazanan** maçı alır. Süre biterse canı fazla olan raundu alır.
 - Sonda iki oyuncunun istatistikleri yan yana gösterilir (hasar, isabet, parry, kombo, özel).
 
-Klavye (kamerasız test): **P1** `1 2 3 4` (yumruk, kalkan, ateş, özel) + `W/S` — **P2** `7 8 9 0` + `↑/↓`.
+Klavye (kamerasız test): **P1** `1 2 3 4 5` (yumruk, kalkan, ateş, özel, ayna) + `W/S` — **P2** `7 8 9 0 -` + `↑/↓`.
+
+Menüde sakin, dövüşte hareketli bir chiptune arcade müziği çalar; o da efektler gibi numpy ile kodda üretilir (`M` ile sessize alınır).
 
 ## Kurulum
 

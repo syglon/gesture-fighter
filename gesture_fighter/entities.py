@@ -153,6 +153,7 @@ class SpecialBeam:
         self.half_h = 46
         self.dmg_accum = 0.0
         self.color = C.C_SPECIAL
+        self.stop_x = None  # bir ayna ışını keserse ışın burada biter
 
     @property
     def y(self):
@@ -175,7 +176,11 @@ class SpecialBeam:
         inten = self.intensity
         x0 = int(self.x0)
         x1 = C.SCREEN_W if self.owner.facing > 0 else 0
+        if self.stop_x is not None:
+            x1 = int(self.stop_x)
         w = abs(x1 - x0)
+        if w < 4:
+            return
         hh = self.half_h * (0.6 + 0.4 * inten)
         layer = pygame.Surface((w, int(hh * 3) + 2))
         lh = layer.get_height()
@@ -193,6 +198,83 @@ class SpecialBeam:
         left = x0 if self.owner.facing > 0 else x1
         surf.blit(layer, (left, int(self.y - lh / 2)), special_flags=pygame.BLEND_ADD)
         blit_glow(surf, (x0, self.y), hh * 2.6, scale_color(self.color, inten))
+
+
+class Mirror:
+    """Versus'ta 🤟 ile ortaya konan ayna: rakibin mermilerini sahibine değil rakibe geri yansıtır.
+
+    Tek yönlüdür: sahibinin kendi mermileri içinden geçer. Rakibin özel ışınını da keser.
+    """
+
+    TOP = C.ARENA_TOP + 40  # süre kutusunun altından başlar
+    BOTTOM = C.FLOOR_Y - 14
+
+    def __init__(self, owner, x):
+        self.owner = owner
+        self.x = x
+        self.t = 0.0
+        self.duration = C.MIRROR_DURATION
+        self.alive = True
+        self.flash = 0.0
+        self.flash_y = (self.TOP + self.BOTTOM) / 2
+
+    @property
+    def strength(self):
+        """0..1 — açılış ve kapanış animasyonu."""
+        return max(0.0, min(1.0, self.t / 0.18) * min(1.0, (self.duration - self.t) / 0.4))
+
+    @property
+    def active(self):
+        return self.alive and self.t > 0.08
+
+    def hit(self, y):
+        self.flash = 0.18
+        self.flash_y = y
+
+    def update(self, dt):
+        self.t += dt
+        self.flash = max(0.0, self.flash - dt)
+        if self.t >= self.duration:
+            self.alive = False
+
+    def draw(self, surf):
+        k = self.strength
+        if k <= 0:
+            return
+        col = self.owner.color
+        grow = min(1.0, self.t / 0.18)
+        cy = (self.TOP + self.BOTTOM) / 2
+        h = int((self.BOTTOM - self.TOP) * (0.3 + 0.7 * grow))
+        y0 = int(cy - h / 2)
+        w = 30
+        x = int(self.x)
+        blit_glow(surf, (x, cy), 150 * k, scale_color(C.C_MIRROR, 0.35 * k))
+        glass = pygame.Surface((w + 40, h), pygame.SRCALPHA)
+        pygame.draw.rect(glass, (*C.C_MIRROR, int(80 * k)), (20, 0, w, h), border_radius=6)
+        pygame.draw.rect(glass, (255, 255, 255, int(45 * k)), (24, 0, 7, h))
+        # cam üzerinde kayan parlama
+        sy = (self.t * 520) % (h + 220) - 110
+        pygame.draw.polygon(glass, (255, 255, 255, int(150 * k)),
+                            [(20, sy), (20 + w, sy - 44), (20 + w, sy - 14), (20, sy + 30)])
+        pygame.draw.rect(glass, (*col, int(230 * k)), (20, 0, w, h), 3, border_radius=6)
+        surf.blit(glass, (x - w // 2 - 20, y0))
+        # çerçevenin üst ve alt başlıkları
+        for yy in (y0 - 6, y0 + h - 6):
+            pygame.draw.rect(surf, scale_color(col, k), (x - w // 2 - 8, yy, w + 16, 12), border_radius=5)
+        # pırıltılar
+        for i in range(7):
+            tw = 0.5 + 0.5 * math.sin(self.t * 7 + i * 1.7)
+            if tw < 0.35:
+                continue
+            py = y0 + (i + 0.5) / 7 * h + math.sin(self.t * 2 + i) * 12
+            px = x + math.sin(i * 2.3 + self.t * 1.5) * 9
+            r = 3 + 5 * tw
+            blit_glow(surf, (px, py), r * 3, scale_color((255, 255, 255), 0.6 * tw * k))
+            pygame.draw.line(surf, (255, 255, 255), (px - r, py), (px + r, py), 2)
+            pygame.draw.line(surf, (255, 255, 255), (px, py - r), (px, py + r), 2)
+        if self.flash > 0:
+            f = self.flash / 0.18
+            blit_glow(surf, (x, self.flash_y), 90 * f, (int(255 * f),) * 3)
 
 
 # ====================================================================== fighter
@@ -224,6 +306,7 @@ class Fighter:
         self.t = 0.0
         self.combo = 0
         self.combo_timer = 0.0
+        self.mirror_cd = 0.0
 
     @property
     def hand_pos(self):
@@ -249,6 +332,7 @@ class Fighter:
         self.hurt_flash = max(0.0, self.hurt_flash - dt * 3)
         self.attack_anim = max(0.0, self.attack_anim - dt * 6)
         self.guard_break = max(0.0, self.guard_break - dt)
+        self.mirror_cd = max(0.0, self.mirror_cd - dt)
         if self.ghost_hp > self.hp:
             self.ghost_hp = max(self.hp, self.ghost_hp - dt * 40)
         self.combo_timer -= dt

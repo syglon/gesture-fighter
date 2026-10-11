@@ -142,6 +142,7 @@ _FINGER_PATTERN = {
     Gesture.FIST: (0, 0, 0, 0),
     Gesture.PALM: (1, 1, 1, 1),
     Gesture.POINT: (1, 0, 0, 0),
+    Gesture.MIRROR: (1, 0, 0, 1),
     Gesture.PEACE: (1, 1, 0, 0),
 }
 _FINGER_LEN = (0.42, 0.48, 0.44, 0.34)
@@ -169,7 +170,7 @@ def gesture_icon(surf, g, center, size, color, outline=(15, 15, 25)):
             r = pygame.Rect(int(x), palm.y - int(s * 0.07), fw, int(s * 0.2))
         rects.append(r)
     # başparmak
-    if g is Gesture.PALM:
+    if g in (Gesture.PALM, Gesture.MIRROR):
         thumb = pygame.Rect(0, 0, int(s * 0.32), fw)
         thumb.midright = (palm.x + fw // 2, palm.centery - int(s * 0.02))
     else:
