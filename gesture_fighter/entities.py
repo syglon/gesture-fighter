@@ -6,7 +6,7 @@ from collections import deque
 import pygame
 
 from . import config as C
-from .draw import blit_glow, gesture_icon, lerp, scale_color
+from .draw import blit_glow, gesture_icon, lerp, lerp_color, scale_color
 from .gestures import GESTURE_COLOR, Gesture
 
 
@@ -278,8 +278,23 @@ class Mirror:
 
 
 # ====================================================================== fighter
+# Her hareketin vücut pozu. Değerler piksel; bx/by arka elin gövdeye göre konumu (bx yüz yönünde +).
+# lean: gövdenin öne eğilmesi, crouch: çömelme, reach/hand_dy: ön elin uzanması/yüksekliği, stance: bacak açıklığı
+POSES = {
+    Gesture.NONE:   dict(lean=0, crouch=0, reach=0, hand_dy=0, bx=-22, by=2, stance=16),
+    Gesture.FIST:   dict(lean=9, crouch=5, reach=4, hand_dy=2, bx=6, by=-14, stance=21),     # öne atılma, arka el çenede
+    Gesture.PALM:   dict(lean=-6, crouch=11, reach=-4, hand_dy=-2, bx=24, by=4, stance=25),  # geri yaslanıp çömelme
+    Gesture.POINT:  dict(lean=4, crouch=3, reach=10, hand_dy=-3, bx=28, by=-8, stance=19),   # arka el nişan kolunu destekler
+    Gesture.PEACE:  dict(lean=1, crouch=9, reach=8, hand_dy=-4, bx=34, by=-10, stance=29),   # geniş duruş, iki el önde
+    Gesture.MIRROR: dict(lean=2, crouch=0, reach=2, hand_dy=-16, bx=-16, by=-2, stance=18),  # el havada
+}
+
+
 class Fighter:
     """Oyuncu karakteri. `facing` sayesinde iki kişilik modda sağ tarafta da kullanılabilir."""
+
+    BONES = [("neck", "hip"), ("hip", "foot1"), ("hip", "foot2"), ("neck", "back"), ("neck", "hand")]
+    DISSOLVE_AT = 1.2  # ölümden bu kadar sonra (oyun süresi) karakter partiküllere dağılır
 
     def __init__(self, x=C.PLAYER_X, facing=1, color=(90, 220, 255), name="P1"):
         self.x = x
@@ -307,11 +322,17 @@ class Fighter:
         self.combo = 0
         self.combo_timer = 0.0
         self.mirror_cd = 0.0
+        self.pose = dict(POSES[Gesture.NONE])
+        self.dead_t = 0.0
+        self.dissolved = False
+        self.was_ready = False
 
     @property
     def hand_pos(self):
-        reach = 40 + 22 * self.attack_anim
-        return self.x + self.facing * reach, self.y - 14 + math.sin(self.t * 3) * 2
+        P = self.pose
+        reach = 40 + P["reach"] + 22 * self.attack_anim
+        return (self.x + self.facing * reach,
+                self.y - 14 + P["hand_dy"] + P["crouch"] * 0.6 + math.sin(self.t * 3) * 2)
 
     @property
     def shield_center(self):
@@ -324,6 +345,27 @@ class Fighter:
     @property
     def in_parry_window(self):
         return self.shield_on and self.shield_t <= C.PARRY_WINDOW
+
+    @property
+    def special_ready(self):
+        return self.hp > 0 and self.beam is None and self.special >= C.SPECIAL_MAX
+
+    @property
+    def fall(self):
+        """0 → 1: ölünce geriye düşüş, sonunda küçük bir sekme."""
+        t = self.dead_t / 0.45
+        if t < 1:
+            return t * t
+        return 1.0 - 0.1 * math.sin(min(1.0, (t - 1) / 0.35) * math.pi)
+
+    def _pose_target(self):
+        if self.hp <= 0:
+            return POSES[Gesture.NONE]
+        if self.beam is not None:
+            return POSES[Gesture.PEACE]
+        if self.gesture is Gesture.PALM and not self.shield_on:
+            return POSES[Gesture.NONE]  # guard break: kalkan yok, poz da yok
+        return POSES[self.gesture]
 
     def update_timers(self, dt):
         self.t += dt
@@ -338,50 +380,122 @@ class Fighter:
         self.combo_timer -= dt
         if self.combo_timer <= 0:
             self.combo = 0
+        k = min(1.0, dt * 14)  # pozlar arasında yumuşak geçiş
+        for key, v in self._pose_target().items():
+            self.pose[key] += (v - self.pose[key]) * k
+        if self.hp <= 0:
+            self.dead_t += dt
+
+    def skeleton(self):
+        """Eklem noktaları (dünya koordinatı): poz karışımı ve ölüm düşüşü uygulanmış."""
+        P, f = self.pose, self.facing
+        dead = self.hp <= 0
+        x = self.x
+        y = self.y + (0.0 if dead else math.sin(self.t * 3) * 3)
+        lean = P["lean"]
+        if self.gesture is Gesture.POINT:
+            lean -= 7 * self.attack_anim  # ateşin geri tepmesi
+        elif self.gesture is Gesture.FIST:
+            lean += 5 * self.attack_anim  # yumrukla öne atılma
+        cr = P["crouch"]
+        fall = min(1.0, self.fall) if dead else 0.0
+        stance = lerp(P["stance"], 5, fall)
+        hand = self.hand_pos
+        back = (x + f * (P["bx"] + lean * 0.5), y + P["by"] + cr)
+        if dead:  # kollar gevşer
+            hand = (lerp(hand[0], x + f * 20, fall), lerp(hand[1], y + 10, fall))
+            back = (lerp(back[0], x - f * 10, fall), lerp(back[1], y + 12, fall))
+        pts = {
+            "head": (x + f * (4 + lean * 1.3), y - 44 + cr),
+            "neck": (x + f * lean, y - 28 + cr),
+            "hip": (x + f * (lean * 0.3 - 2), y + 18 + cr),
+            "foot1": (x - stance, y + 58),
+            "foot2": (x + stance, y + 58),
+            "hand": hand,
+            "back": back,
+        }
+        if dead:
+            # ayakların etrafında geriye döner, geri kayar ve yere iner
+            px, py = x, y + 58
+            ang = -f * self.fall * math.pi / 2
+            nx = px - f * 46 * min(1.0, self.dead_t / 0.5)
+            ny = lerp(py, C.FLOOR_Y - 12, min(1.0, self.dead_t / 0.45))
+            c, s = math.cos(ang), math.sin(ang)
+            pts = {n: (nx + (qx - px) * c - (qy - py) * s, ny + (qx - px) * s + (qy - py) * c)
+                   for n, (qx, qy) in pts.items()}
+        return pts
 
     def draw(self, surf, fonts):
-        x = int(self.x)
-        y = self.y + math.sin(self.t * 3) * 3
+        dead = self.hp <= 0
+        if dead and self.dissolved:
+            return
+        pts = self.skeleton()
+        ip = {n: (int(px), int(py)) for n, (px, py) in pts.items()}
+        f = self.facing
+        mid_x = (pts["head"][0] + pts["hip"][0]) / 2 if dead else self.x
+        pulse = 0.5 + 0.5 * math.sin(self.t * 6)
+
         # zemindeki gölge
-        h_above = C.FLOOR_Y - (y + 58)
+        h_above = C.FLOOR_Y - max(pts["foot1"][1], pts["foot2"][1])
         sw = max(30, 70 - h_above * 0.08)
+        if dead:
+            sw = lerp(sw, 85, min(1.0, self.fall))
         shadow = pygame.Surface((int(sw * 2), 16), pygame.SRCALPHA)
         pygame.draw.ellipse(shadow, (0, 0, 0, 110), shadow.get_rect())
-        surf.blit(shadow, (x - sw, C.FLOOR_Y - 6))
+        surf.blit(shadow, (int(mid_x - sw), C.FLOOR_Y - 6))
 
-        if self.iframes > 0 and int(self.iframes * 14) % 2 == 0:
+        ready = self.special_ready
+        if ready:  # özel hazır: ayak altında altın halkalar
+            for k, alpha in (((self.t * 1.2) % 1.0, None), (pulse, 1.0)):
+                rw = 40 + 50 * k if alpha is None else 62 + 8 * k
+                a = int(200 * (1 - k)) if alpha is None else int(110 + 110 * k)
+                ring = pygame.Surface((int(rw * 2) + 4, int(rw * 0.35) + 4), pygame.SRCALPHA)
+                pygame.draw.ellipse(ring, (*C.C_SPECIAL, a), ring.get_rect(), 3)
+                surf.blit(ring, (int(self.x - ring.get_width() / 2), int(C.FLOOR_Y - ring.get_height() / 2)))
+
+        if not dead and self.iframes > 0 and int(self.iframes * 14) % 2 == 0:
             return  # hasar sonrası yanıp sönme
 
         body = (230, 236, 255)
         if self.hurt_flash > 0:
             body = (255, int(236 * (1 - self.hurt_flash)), int(255 * (1 - self.hurt_flash)))
-        f = self.facing
+        if dead and self.dead_t > 0.75:  # dağılmadan önce kendi renginde parlar ve titrer
+            k = min(1.0, (self.dead_t - 0.75) / (self.DISSOLVE_AT - 0.75))
+            body = lerp_color(body, self.color, k)
+            if int(self.dead_t * 30) % 2 == 0:
+                body = lerp_color(body, (255, 255, 255), 0.6 * k)
         dark = (20, 20, 35)
-        head = (x + f * 4, int(y - 44))
-        neck = (x, int(y - 28))
-        hip = (x - f * 2, int(y + 18))
-        hand = (int(self.hand_pos[0]), int(self.hand_pos[1]))
-        back_hand = (x - f * 22, int(y + 2))
-        legs = [(x - 16, int(y + 58)), (x + 16, int(y + 58))]
+        neck, head, hand = ip["neck"], ip["head"], ip["hand"]
 
-        blit_glow(surf, (x, y), 90, scale_color(self.color, 0.25))
+        center = (mid_x, (pts["neck"][1] + pts["hip"][1]) / 2)
+        blit_glow(surf, center, 90, scale_color(self.color, 0.25))
+        if ready:
+            blit_glow(surf, center, 100, scale_color(C.C_SPECIAL, 0.18 + 0.12 * pulse))
+        if self.beam is not None:
+            blit_glow(surf, center, 130 + 10 * math.sin(self.t * 30), scale_color(C.C_SPECIAL, 0.5 * self.beam.intensity))
         # atkı
-        sway = math.sin(self.t * 6) * 6
+        sway = math.sin(self.t * 6) * 6 * (1 - (min(1.0, self.fall) if dead else 0.0))
         pygame.draw.polygon(surf, self.color, [(neck[0] - 2, neck[1] - 4), (neck[0] - f * 34, neck[1] + 4 + sway),
                                                (neck[0] - f * 30, neck[1] + 14 + sway), (neck[0] + 2, neck[1] + 6)])
         for w, col in ((12, dark), (8, body)):
-            pygame.draw.line(surf, col, neck, hip, w)
-            for leg in legs:
-                pygame.draw.line(surf, col, hip, leg, w)
-            pygame.draw.line(surf, col, neck, back_hand, w - 2)
-            pygame.draw.line(surf, col, neck, hand, w - 2)
+            for a, b in self.BONES:
+                pygame.draw.line(surf, col, ip[a], ip[b], w - 2 if b in ("hand", "back") else w)
         pygame.draw.circle(surf, dark, head, 19)
         pygame.draw.circle(surf, body, head, 16)
+        if dead:  # baygın gözler
+            for dx in (-5, 5):
+                pygame.draw.line(surf, dark, (head[0] + dx - 3, head[1] - 3), (head[0] + dx + 3, head[1] + 3), 2)
+                pygame.draw.line(surf, dark, (head[0] + dx - 3, head[1] + 3), (head[0] + dx + 3, head[1] - 3), 2)
+            pygame.draw.circle(surf, dark, hand, 10)
+            pygame.draw.circle(surf, body, hand, 8)
+            return
         # vizör
         pygame.draw.rect(surf, self.color, (head[0] + (2 if f > 0 else -14), head[1] - 5, 12, 6), border_radius=3)
 
         gcol = GESTURE_COLOR[self.gesture]
         blit_glow(surf, hand, 36 + 10 * self.attack_anim, scale_color(gcol, 0.8))
+        if ready:
+            blit_glow(surf, hand, 46 + 12 * pulse, scale_color(C.C_SPECIAL, 0.7))
         if self.gesture is Gesture.NONE:
             pygame.draw.circle(surf, dark, hand, 10)
             pygame.draw.circle(surf, body, hand, 8)

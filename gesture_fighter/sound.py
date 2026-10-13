@@ -168,6 +168,13 @@ class SoundBank:
         sig = sum(self._sweep(f0, f0 * 1.02, d) / (i + 1) for i, f0 in enumerate((1760, 2794, 3951)))
         self._make("mirror_hit", (sig + 0.3 * self._sweep(600, 2400, d, "square")) * self._env(d, 0.002, 12), 0.4)
 
+        # özel hazır: yükselen üçlü çan
+        self._make("ready", self._melody([784, 1175, 1568], 0.07), 0.3)
+        # ölünce dağılma: parıldayan yükselen hışırtı
+        d = 0.8
+        self._make("dissolve", (0.5 * self._noise(d, 2) + 0.4 * self._sweep(300, 1800, d, curve=0.6))
+                   * self._env(d, 0.02, 4), 0.3)
+
         self._make("win", self._melody([523, 659, 784, 1047, 784, 1047], 0.14), 0.4)
         self._make("lose", self._melody([440, 392, 349, 262], 0.28, wave="saw"), 0.35)
 

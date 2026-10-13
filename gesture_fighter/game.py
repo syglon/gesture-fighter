@@ -303,6 +303,7 @@ class Game:
                 p.shield_t = 1.0
             else:
                 p.shield_on = False
+            self.fighter_fx(p, dt)
         if self.boss:
             self.boss.update(dt, self)
         for pr in self.projectiles:
@@ -336,6 +337,7 @@ class Game:
                 p.shield_on = False
                 if p.hp <= 0:
                     p.beam = None
+            self.fighter_fx(p, dt)
         if self.boss:
             self.boss.update(dt, self)
 
@@ -455,6 +457,41 @@ class Game:
             self.try_special(p)
         if g is Gesture.MIRROR and entered:
             self.try_mirror(p)
+
+    def fighter_fx(self, p, dt):
+        """Karakter efektleri: özel hazır parıltısı, ışın aurası, ölünce partiküllere dağılma."""
+        if p.hp <= 0:
+            if not p.dissolved and p.dead_t >= Fighter.DISSOLVE_AT:
+                p.dissolved = True
+                pts = p.skeleton()
+                for a, b in Fighter.BONES:
+                    (ax, ay), (bx, by) = pts[a], pts[b]
+                    for i in range(9):
+                        k = i / 8
+                        self.particles.emit(lerp(ax, bx, k), lerp(ay, by, k), random.uniform(-90, 90),
+                                            random.uniform(-260, -60), random.choice([p.color, p.color, C.WHITE]),
+                                            life=random.uniform(0.5, 1.1), size=random.uniform(2, 4.5), gravity=-80)
+                hx, hy = pts["head"]
+                self.particles.burst(hx, hy, p.color, n=24, speed=(60, 260), life=(0.4, 0.9), gravity=-60)
+                self.sound.play("dissolve")
+            return
+        ready = p.special_ready
+        if ready and not p.was_ready:
+            self.sound.play("ready", 0.8)
+            self.notify(f"ready{p.name}", "SPECIAL READY!", p.x + p.facing * 20, p.y - 120, C.C_SPECIAL,
+                        cooldown=1.5, font=self.fonts.mid)
+            self.particles.burst(p.x, p.y, C.C_SPECIAL, n=30, speed=(80, 320), life=(0.3, 0.7))
+        p.was_ready = ready
+        if ready and random.random() < dt * 30:  # ayak altından yükselen altın kıvılcımlar
+            self.particles.emit(p.x + random.uniform(-36, 36), C.FLOOR_Y - random.uniform(0, 16),
+                                random.uniform(-20, 20), random.uniform(-230, -120),
+                                random.choice([C.C_SPECIAL, C.C_SPECIAL, (255, 250, 220)]),
+                                life=random.uniform(0.5, 0.9), size=random.uniform(2, 3.5), drag=0.6)
+        if p.beam is not None and random.random() < dt * 45:  # ışın atarken gövdeden dışa saçılan aura
+            a = random.uniform(0, math.tau)
+            self.particles.emit(p.x + math.cos(a) * 46, p.y + math.sin(a) * 64, math.cos(a) * 160,
+                                math.sin(a) * 160 - 40, random.choice([C.C_SPECIAL, (255, 150, 40), C.WHITE]),
+                                life=random.uniform(0.25, 0.5), size=random.uniform(2, 4))
 
     def player_attack(self, p, g):
         spec = C.PUNCH if g is Gesture.FIST else C.FIRE
@@ -1039,8 +1076,7 @@ class Game:
         if self.boss and self.boss.state != "dead":
             self.boss.draw(w, self)
         for p in self.players:
-            if p.hp > 0:
-                p.draw(w, self.fonts)
+            p.draw(w, self.fonts)  # ölü karakter düşüp dağılana kadar çizilir
             if self.versus and p.hp > 0:
                 text(w, self.fonts.tiny, p.name, (p.x, p.y - 96), p.color)
         for m in self.mirrors:

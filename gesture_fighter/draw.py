@@ -115,6 +115,7 @@ def bar(surf, rect, frac, color, ghost=None, back=(25, 25, 40), border=(230, 230
     pygame.draw.rect(surf, back, rect, border_radius=5)
     inner = rect.inflate(-6, -6)
 
+
     def part(f, col):
         f = max(0.0, min(1.0, f))
         w = int(inner.w * f)
