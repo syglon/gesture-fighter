@@ -71,7 +71,7 @@ MIRROR_COOLDOWN = 8.0       # tekrar kullanmak için bekleme (sn, kullanıldığ
 MIRROR_OFFSET = 60          # ayna, ekranın ortasından sahibinin tarafına bu kadar piksel kayık
 MIRROR_DAMAGE_MULT = 1.2    # yansıyan mermi hasarı çarpanı
 MIRROR_SPEED_MULT = 1.1     # yansıyan mermi hız çarpanı
-MIRROR_MAX_BOUNCES = 4      # iki ayna arasında sonsuz sekme olmasın
+MIRROR_MAX_BOUNCES = 1      # bir mermi en fazla bu kadar yansır, sonra aynalardan geçer (iki ayna arasında takılmasın)
 
 # ---------------- Boss ----------------
 BOSS_X = 1060

@@ -51,7 +51,7 @@ def ensure_model():
     if MODEL_PATH.exists() and MODEL_PATH.stat().st_size > 1_000_000:
         return MODEL_PATH
     MODEL_PATH.parent.mkdir(parents=True, exist_ok=True)
-    print(f"[tracker] El modeli indiriliyor: {MODEL_URL}")
+    print(f"[tracker] Downloading the hand model: {MODEL_URL}")
     tmp = MODEL_PATH.with_suffix(".part")
     urllib.request.urlretrieve(MODEL_URL, tmp)
     tmp.replace(MODEL_PATH)
@@ -87,21 +87,21 @@ class HandTracker:
         try:
             from mediapipe.tasks.python import BaseOptions, vision
         except Exception as e:  # pragma: no cover
-            return False, f"mediapipe yüklenemedi: {e}"
+            return False, f"Could not load mediapipe: {e}"
         try:
             model = ensure_model()
         except Exception as e:
-            return False, f"El modeli indirilemedi: {e}"
+            return False, f"Could not download the hand model: {e}"
 
         cap = cv2.VideoCapture(self.camera_index)
         if not cap.isOpened():
-            return False, f"Kamera {self.camera_index} açılamadı"
+            return False, f"Camera {self.camera_index} could not be opened"
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, C.CAMERA_W)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, C.CAMERA_H)
         ok, _ = cap.read()
         if not ok:
             cap.release()
-            return False, f"Kamera {self.camera_index} görüntü vermiyor"
+            return False, f"Camera {self.camera_index} gives no image"
 
         opts = vision.HandLandmarkerOptions(
             base_options=BaseOptions(model_asset_path=str(model)),
@@ -116,7 +116,7 @@ class HandTracker:
         self._running = True
         self._thread = threading.Thread(target=self._loop, name="HandTracker", daemon=True)
         self._thread.start()
-        return True, "Kamera hazır"
+        return True, "Camera ready"
 
     @property
     def slots(self):

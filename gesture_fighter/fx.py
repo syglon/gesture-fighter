@@ -36,7 +36,7 @@ class Particles:
             p[0] += p[2] * dt
             p[1] += p[3] * dt
             alive.append(p)
-        self.items = alive[-1500:]
+        self.items = alive[-700:]  # üst sınır: çok fazla parıltılı partikül FPS'i düşürür
 
     def draw(self, surf):
         for x, y, _, _, life, max_life, size, color, _, _, g in self.items:

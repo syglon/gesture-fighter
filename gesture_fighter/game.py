@@ -64,7 +64,7 @@ class Game:
             if ok:
                 self.tracker = tracker
             else:
-                print(f"[game] {msg} — klavye moduna geçiliyor.")
+                print(f"[game] {msg} — switching to keyboard mode.")
 
         self.bg = build_background()
         self.world = pygame.Surface((W, H))
@@ -275,6 +275,11 @@ class Game:
                 self.sound.play("beep")
             if self.state_t >= 3.0:
                 self.set_state("fight")
+                for p in self.players:
+                    # Geri sayımda tutulan hareket (ör. 🤟) dövüşün ilk karesinde "yeni" sayılsın;
+                    # yoksa oyuncu eli indirip tekrar yapmadan ayna/özel tetiklenmez.
+                    p.gesture = Gesture.NONE
+                    p.shield_on = False
                 if self.boss:
                     self.boss.set_state("idle")
                 self.show_banner("FIGHT!", None, C.C_SPECIAL, 1.0)
@@ -907,6 +912,8 @@ class Game:
             for pr in self.projectiles:
                 if not pr.alive or pr.shooter is None or pr.shooter is owner:
                     continue
+                if getattr(pr, "bounces", 0) >= C.MIRROR_MAX_BOUNCES:
+                    continue  # zaten yansımış: iki ayna arasında sonsuz sekmesin, geçip gitsin
                 if not (Mirror.TOP <= pr.y <= Mirror.BOTTOM) or pr.vx * side <= 0:
                     continue
                 if abs(pr.x - m.x) > pr.radius + 15:
@@ -918,16 +925,13 @@ class Game:
                 pr.color = C.C_MIRROR
                 pr.trail.clear()
                 pr.bounces = getattr(pr, "bounces", 0) + 1
-                if pr.bounces > C.MIRROR_MAX_BOUNCES:
-                    pr.alive = False
                 m.hit(pr.y)
                 owner.stats["reflects"] += 1
                 self.sound.play("mirror_hit", 0.8)
                 self.shake.add(4)
-                self.hitstop = max(self.hitstop, 0.04)
-                self.particles.burst(m.x, pr.y, C.C_MIRROR, n=22, speed=(100, 420), life=(0.15, 0.45),
+                self.particles.burst(m.x, pr.y, C.C_MIRROR, n=12, speed=(100, 420), life=(0.15, 0.4),
                                      angle=0 if side < 0 else math.pi, spread=2.2)
-                self.particles.burst(m.x, pr.y, (255, 255, 255), n=8, speed=(60, 200), life=(0.1, 0.3))
+                self.particles.burst(m.x, pr.y, (255, 255, 255), n=4, speed=(60, 200), life=(0.1, 0.3))
                 self.notify(f"reflect{owner.name}", "REFLECT!", m.x, pr.y - 50, C.C_MIRROR, cooldown=0.35,
                             font=self.fonts.mid)
 

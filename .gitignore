@@ -4,3 +4,4 @@ __pycache__/
 # El modeli ilk çalıştırmada otomatik indiriliyor
 models/
 *.part
+*.zip

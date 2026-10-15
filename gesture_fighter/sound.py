@@ -25,7 +25,7 @@ class SoundBank:
             self._build_music()
             self.enabled = True
         except Exception as e:
-            print(f"[sound] Ses kapalı: {e}")
+            print(f"[sound] Sound disabled: {e}")
 
     # ------------------------------------------------------------------ müzik
     def play_music(self, name):
