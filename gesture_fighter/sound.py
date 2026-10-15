@@ -259,9 +259,11 @@ class SoundBank:
         return buf
 
     def _render_menu(self):
-        """Upbeat platformer-style menu theme (original melody): 144 BPM in C major, a bouncy staccato
-        NES-style lead, an "oom-pah" bass (root on beats 1 and 3, chord stabs on 2 and 4) and light drums."""
-        bpm, bars = 144, 8
+        """Dark, epic menu theme for the OVERLORD boss (original melody): 136 BPM in D minor,
+        Dm - Bb - C - A with the harmonic-minor C# for a villain feel, a driving eighth-note bass,
+        syncopated power-chord stabs, a heroic lead that climbs an octave in the second half,
+        drums and a snare fill before the loop restarts."""
+        bpm, bars = 136, 8
         step = 60.0 / bpm / 4
         total = int(self.rate * step * 16 * bars)
         buf = np.zeros(total)
@@ -271,41 +273,43 @@ class SoundBank:
             seg = sig[: max(0, total - i)]
             buf[i:i + len(seg)] += seg * vol
 
-        major, minor = [0, 4, 7], [0, 3, 7]
-        # (root midi note, chord shape) per bar: C - Am - F - G - C - F - G - C
-        chords = [(48, major), (45, minor), (41, major), (43, major),
-                  (48, major), (41, major), (43, major), (48, major)]
+        # (root midi note) per bar: Dm - Bb - C - A, twice
+        roots = [50, 46, 48, 45, 50, 46, 48, 45]
         # (bar, step, midi note, length in 16th steps)
-        melody = [(0, 0, 72, 2), (0, 2, 76, 2), (0, 4, 79, 2), (0, 6, 76, 2), (0, 8, 79, 3), (0, 12, 84, 4),
-                  (1, 0, 81, 2), (1, 2, 79, 2), (1, 4, 76, 2), (1, 6, 72, 2), (1, 8, 76, 2), (1, 12, 69, 4),
-                  (2, 0, 77, 2), (2, 2, 81, 2), (2, 4, 77, 2), (2, 6, 72, 2), (2, 8, 74, 2), (2, 10, 77, 2),
-                  (2, 12, 81, 4),
-                  (3, 0, 79, 3), (3, 3, 77, 1), (3, 4, 76, 2), (3, 6, 74, 2), (3, 8, 71, 4), (3, 12, 67, 4),
-                  (4, 0, 72, 2), (4, 2, 76, 2), (4, 4, 79, 2), (4, 6, 84, 2), (4, 8, 83, 2), (4, 10, 79, 2),
-                  (4, 12, 76, 4),
-                  (5, 0, 77, 2), (5, 2, 76, 2), (5, 4, 74, 2), (5, 6, 72, 2), (5, 8, 69, 2), (5, 10, 72, 2),
-                  (5, 12, 77, 4),
-                  (6, 0, 79, 2), (6, 2, 81, 2), (6, 4, 83, 2), (6, 6, 86, 2), (6, 8, 83, 2), (6, 10, 79, 2),
-                  (6, 12, 74, 4),
-                  (7, 0, 84, 4), (7, 4, 79, 2), (7, 6, 76, 2), (7, 8, 72, 8)]
+        melody = [(0, 0, 74, 4), (0, 4, 81, 4), (0, 8, 77, 2), (0, 10, 79, 2), (0, 12, 81, 4),
+                  (1, 0, 82, 6), (1, 6, 81, 2), (1, 8, 79, 4), (1, 12, 77, 4),
+                  (2, 0, 79, 4), (2, 4, 76, 4), (2, 8, 72, 2), (2, 10, 76, 2), (2, 12, 79, 4),
+                  (3, 0, 81, 8), (3, 8, 76, 2), (3, 10, 73, 2), (3, 12, 69, 4),
+                  (4, 0, 86, 4), (4, 4, 84, 2), (4, 6, 81, 2), (4, 8, 77, 4), (4, 12, 74, 4),
+                  (5, 0, 77, 2), (5, 2, 79, 2), (5, 4, 81, 2), (5, 6, 82, 2), (5, 8, 86, 8),
+                  (6, 0, 84, 4), (6, 4, 82, 2), (6, 6, 81, 2), (6, 8, 79, 4), (6, 12, 76, 4),
+                  (7, 0, 81, 12)]
         kick, snare, hat = self._drum("kick"), self._drum("snare"), self._drum("hat")
-        for b, (root, shape) in enumerate(chords):
+        for b, root in enumerate(roots):
             base = b * 16
-            # oom-pah: bass root / fifth on beats 1 and 3, short chord stabs on beats 2 and 4
-            add(base, self._tone(self._midi(root - 12), step * 3, "tri", decay=6), 0.30)
-            add(base + 8, self._tone(self._midi(root - 5), step * 3, "tri", decay=6), 0.28)
+            # driving bass: eighth notes on the root, octave jump on the last one
+            for k in range(8):
+                note = root - 12 + (12 if k == 7 else 0)
+                add(base + 2 * k, self._tone(self._midi(note), step * 1.8, "pulse", 0.5, 8), 0.20)
+            # power-chord stabs (root, fifth, octave) on a syncopated rhythm
+            for k in (0, 3, 6, 10, 12):
+                for iv in (12, 19, 24):
+                    add(base + k, self._tone(self._midi(root + iv), step * 1.6, "pulse", 0.5, 10), 0.028)
+            # a low pad holding the chord's third gives the harmony (C# over A = harmonic minor)
+            third = 4 if root in (46, 48, 45) else 3
+            add(base, self._tone(self._midi(root + 12 + third), step * 15, "tri", decay=0.6), 0.05)
+            # drums: kick on 1 and 3 plus a push before 3, snare on 2 and 4, hats on eighths
+            for k in (0, 6, 8):
+                add(base + k, kick, 0.45)
             for k in (4, 12):
-                for iv in shape:
-                    add(base + k, self._tone(self._midi(root + 12 + iv), step * 1.5, "pulse", 0.25, 14), 0.035)
-            add(base, kick, 0.30)
-            add(base + 8, kick, 0.22)
-            for k in (4, 12):
-                add(base + k, snare, 0.14)
-            for k in range(2, 16, 4):  # off-beat hi-hats
-                add(base + k, hat, 0.05)
-        for b, st, note, ln in melody:  # staccato lead: notes are cut short for a bouncy feel
-            add(b * 16 + st, self._tone(self._midi(note), step * ln * 0.7, "pulse", 0.25, 5), 0.10)
-            add(b * 16 + st, self._tone(self._midi(note + 12), step * ln * 0.5, "tri", decay=9), 0.025)
+                add(base + k, snare, 0.26)
+            for k in range(0, 16, 2):
+                add(base + k, hat, 0.06)
+        for k in (12, 13, 14, 15):  # snare fill at the end of the loop
+            add(7 * 16 + k, snare, 0.22)
+        for b, st, note, ln in melody:
+            add(b * 16 + st, self._tone(self._midi(note), step * ln * 0.92, "pulse", 0.5, 2.0, 0.008), 0.095)
+            add(b * 16 + st, self._tone(self._midi(note - 12), step * ln * 0.92, "tri", decay=2.0), 0.04)
         return buf
 
     def _build_music(self):
