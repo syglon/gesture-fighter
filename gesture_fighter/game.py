@@ -7,6 +7,7 @@ There are two modes:
 In versus the camera image is split in half: the hand in the left half is P1 (left), the right half is P2 (right).
 """
 import math
+import os
 import random
 import sys
 
@@ -33,6 +34,15 @@ TIPS = [
     "VERSUS: index + pinky puts up a MIRROR that sends enemy shots back for 3 seconds.",
 ]
 DIFFS = ["easy", "normal", "hard"]
+
+
+def fit_window_size(desktop, canvas=(W, H), margin=(80, 120)):
+    """Window size for windowed mode: the canvas at 1x if it fits on the desktop (with room for the
+    taskbar and title bar), otherwise scaled down so that it fits while keeping the 16:9 aspect ratio."""
+    dw, dh = desktop
+    scale = min(1.0, (dw - margin[0]) / canvas[0], (dh - margin[1]) / canvas[1])
+    scale = max(scale, 0.4)
+    return int(canvas[0] * scale), int(canvas[1] * scale)
 CLASH_RANK = {"punch": 0, "fire": 1, "reflect": 2}  # versus: when two shots collide, the stronger one continues
 
 
@@ -43,12 +53,18 @@ def new_stats():
 
 class Game:
     def __init__(self, args):
+        # Smooth (linear) scaling of the 1280x720 canvas; the default "nearest" looks jagged at
+        # non-integer scales such as 1.5x on a 1920x1080 screen
+        os.environ.setdefault("SDL_RENDER_SCALE_QUALITY", "linear")
         pygame.mixer.pre_init(44100, -16, 2, 512)
         pygame.init()
-        # The game opens in fullscreen (the 1280x720 canvas is scaled to the monitor); F toggles a window
+        # The game opens in fullscreen. pygame.SCALED draws everything on a fixed 1280x720 canvas and scales
+        # it to the monitor's own resolution, keeping the aspect ratio (black bars on non-16:9 screens),
+        # so any resolution works without changing the display mode. F toggles a window.
         self.fullscreen = not args.windowed
         flags = pygame.SCALED | (pygame.FULLSCREEN if self.fullscreen else 0)
         self.screen = pygame.display.set_mode((W, H), flags)
+        self.fit_window()
         pygame.display.set_caption("Gesture Fighter — ME461")
         self.clock = pygame.time.Clock()
         self.fonts = Fonts()
@@ -236,6 +252,22 @@ class Game:
             except pygame.error as e:  # never crash over a display mode: keep the current one
                 self.fullscreen = not self.fullscreen
                 print(f"[game] Could not switch fullscreen mode: {e}")
+        self.fit_window()
+
+    def fit_window(self):
+        """In windowed mode, shrink the window on screens too small for 1280x720 and centre it."""
+        if self.fullscreen:
+            return
+        try:
+            from pygame._sdl2.video import Window
+            desktop = pygame.display.get_desktop_sizes()[0]
+            size = fit_window_size(desktop)
+            win = Window.from_display_module()
+            if tuple(win.size) != size:
+                win.size = size
+                win.position = ((desktop[0] - size[0]) // 2, (desktop[1] - size[1]) // 2)
+        except Exception:
+            pass  # optional nicety: the default window size still works
 
     def go_title(self):
         self.paused = False

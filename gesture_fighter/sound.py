@@ -5,6 +5,7 @@ import pygame
 
 class SoundBank:
     MUSIC_VOLUME = 0.35
+    MUSIC_VOLUMES = {"menu": 0.2, "battle": 0.35}  # the calm menu track plays quieter
 
     def __init__(self, enabled=True):
         self.sounds = {}
@@ -39,7 +40,7 @@ class SoundBank:
             return
         self.current_music = name
         self.music_ch.play(track, loops=-1, fade_ms=700)
-        self.music_ch.set_volume(self.MUSIC_VOLUME)
+        self.music_ch.set_volume(self.MUSIC_VOLUMES.get(name, self.MUSIC_VOLUME))
 
     def stop_music(self):
         if self.music_ch is not None:
@@ -257,13 +258,70 @@ class SoundBank:
                     add(base + k, hat, 0.10 if k % 4 else 0.06)
         return buf
 
+    def _soft(self, freq, dur, wave="tri", attack=0.02, release=0.2, decay=0.8):
+        """A soft note: slow attack, gentle decay and a long release (for the calm menu track)."""
+        n = max(1, int(self.rate * dur))
+        t = np.arange(n) / self.rate
+        ph = (freq * t) % 1.0
+        sig = 4 * np.abs(ph - 0.5) - 1 if wave == "tri" else np.sin(2 * np.pi * ph)
+        env = np.exp(-t * decay)
+        a = min(n, int(self.rate * attack))
+        env[:a] *= np.linspace(0, 1, a)
+        r = min(n, int(self.rate * release))
+        env[-r:] *= np.linspace(1, 0, r)
+        return sig * env
+
+    def _render_menu(self):
+        """Calm menu track: 88 BPM, Fmaj7 - Em7 - Dm7 - Cmaj7, soft pad, sine bass, slow arpeggio and a
+        sparse melody. No drums, a gentle echo and a low-pass filter keep it easy on the ears."""
+        bpm, bars = 88, 8
+        step = 60.0 / bpm / 4
+        total = int(self.rate * step * 16 * bars)
+        buf = np.zeros(total)
+
+        def add(at_step, sig, vol):
+            i = int(at_step * step * self.rate)
+            seg = sig[: max(0, total - i)]
+            buf[i:i + len(seg)] += seg * vol
+
+        maj7, min7, dom7 = [0, 4, 7, 11], [0, 3, 7, 10], [0, 4, 7, 10]
+        chords = [(53, maj7), (52, min7), (50, min7), (48, maj7),
+                  (53, maj7), (52, min7), (50, min7), (55, dom7)]
+        # (bar, step, midi note, length in 16th steps) — C major pentatonic melody
+        melody = [(0, 0, 69, 4), (0, 4, 72, 4), (0, 8, 76, 6), (0, 14, 74, 2),
+                  (1, 0, 76, 8), (1, 8, 67, 4), (1, 12, 69, 4),
+                  (2, 0, 74, 4), (2, 4, 76, 4), (2, 8, 69, 8),
+                  (3, 0, 67, 8), (3, 8, 64, 8),
+                  (4, 0, 69, 2), (4, 2, 72, 2), (4, 4, 76, 4), (4, 8, 79, 6), (4, 14, 76, 2),
+                  (5, 0, 74, 4), (5, 4, 76, 4), (5, 8, 67, 8),
+                  (6, 0, 69, 4), (6, 4, 74, 4), (6, 8, 76, 4), (6, 12, 74, 4),
+                  (7, 0, 74, 12)]
+        bar_len = step * 16
+        for b, (root, shape) in enumerate(chords):
+            base = b * 16
+            for iv in shape[:3]:  # pad: the chord held for the whole bar
+                add(base, self._soft(self._midi(root + iv), bar_len, "tri", 0.25, 0.4, 0.3), 0.035)
+            for k in (0, 8):  # bass on beats 1 and 3
+                add(base + k, self._soft(self._midi(root - 12), step * 7.5, "sine", 0.01, 0.15, 1.5), 0.22)
+            for k in range(8):  # slow arpeggio in eighth notes
+                note = root + 12 + shape[[0, 1, 2, 3, 2, 1, 2, 3][k]]
+                add(base + 2 * k, self._soft(self._midi(note), step * 1.9, "tri", 0.01, 0.1, 5), 0.03)
+        for b, st, note, ln in melody:
+            add(b * 16 + st, self._soft(self._midi(note), step * ln * 0.95, "sine", 0.03, 0.15, 1.2), 0.09)
+        # gentle echo (3/8 of a bar later) and a low-pass to round off the edges
+        d = int(self.rate * step * 6)
+        echo = np.zeros_like(buf)
+        echo[d:] = buf[:-d] * 0.28
+        buf = buf + echo
+        return np.convolve(buf, np.ones(9) / 9, mode="same")
+
     def _build_music(self):
         am, f, c, g, e = (45, True), (41, False), (48, False), (43, False), (40, False)
         battle = self._render(150, 8, [am, f, c, g, am, f, g, e])
-        menu = self._render(104, 4, [am, f, c, g], lead=False, drums=False, arp_wave="tri")
+        menu = self._render_menu()
         for name, sig in (("battle", battle), ("menu", menu)):
             peak = np.max(np.abs(sig)) or 1.0
-            data = (sig / peak * 0.8 * 32767).astype(np.int16)
+            data = (sig / peak * (0.8 if name == "battle" else 0.6) * 32767).astype(np.int16)
             if self.channels == 2:
                 data = np.ascontiguousarray(np.column_stack([data, data]))
             self.music[name] = pygame.sndarray.make_sound(data)

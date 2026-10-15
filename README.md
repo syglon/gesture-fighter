@@ -51,7 +51,9 @@ python -m venv .venv
 ```
 
 The game opens in **fullscreen**. Press **`F`** at any time to switch to a window, and `F` again to go back
-to fullscreen.
+to fullscreen. It works on any screen resolution: the game is drawn on a fixed 1280×720 canvas that is scaled
+smoothly to your monitor while keeping its 16:9 shape (screens with a different shape get thin black bars).
+In windowed mode the window is shrunk automatically on screens smaller than 1280×720.
 
 **Command-line options**
 
@@ -182,7 +184,8 @@ Camera frame ──► MediaPipe Hand Landmarker ──► 21 landmarks ──�
   rotated. The pattern of open fingers is then mapped to a gesture; the thumb is ignored because it is the
   least reliable finger.
 - **Filtering:** a majority vote over the last 4 frames removes single-frame errors.
-- **Sound and music** are synthesised with NumPy when the game starts — there are no audio files.
+- **Sound and music** are synthesised with NumPy when the game starts — there are no audio files. The menu plays
+  a calm chiptune track and fights play a faster one.
 
 ## 7. Project structure
 
