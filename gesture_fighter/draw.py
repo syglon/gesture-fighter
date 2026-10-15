@@ -1,4 +1,4 @@
-"""Çizim yardımcıları: parıltı (glow), yazılar, barlar, el hareketi ikonları, arka plan."""
+"""Drawing helpers: glow, text, bars, gesture icons and the background."""
 import random
 
 import numpy as np
@@ -129,7 +129,7 @@ def bar(surf, rect, frac, color, ghost=None, back=(25, 25, 40), border=(230, 230
     if ghost is not None and ghost > frac:
         part(ghost, (255, 255, 255))
     part(frac, color)
-    # parlaklık şeridi
+    # highlight stripe
     if frac > 0:
         hl = pygame.Rect(inner.x, inner.y, int(inner.w * max(0.0, min(1.0, frac))), max(2, inner.h // 3))
         if reverse:
@@ -150,7 +150,7 @@ _FINGER_LEN = (0.42, 0.48, 0.44, 0.34)
 
 
 def gesture_icon(surf, g, center, size, color, outline=(15, 15, 25)):
-    """Basit vektörel el ikonu çizer (emoji fontuna gerek kalmasın diye)."""
+    """Draws a simple vector hand icon (so no emoji font is needed)."""
     cx, cy = center
     s = size
     if g not in _FINGER_PATTERN:
@@ -170,7 +170,7 @@ def gesture_icon(surf, g, center, size, color, outline=(15, 15, 25)):
         else:
             r = pygame.Rect(int(x), palm.y - int(s * 0.07), fw, int(s * 0.2))
         rects.append(r)
-    # başparmak
+    # thumb
     if g in (Gesture.PALM, Gesture.MIRROR):
         thumb = pygame.Rect(0, 0, int(s * 0.32), fw)
         thumb.midright = (palm.x + fw // 2, palm.centery - int(s * 0.02))
@@ -201,7 +201,7 @@ def build_background():
         b = rng.randint(60, 200)
         r = 1 if rng.random() < 0.85 else 2
         pygame.draw.circle(bg, (b, b, min(255, b + 30)), (x, y), r)
-    # uzak şehir/dağ silueti
+    # distant skyline / mountain silhouette
     pts = [(0, C.FLOOR_Y)]
     x = 0
     while x <= W:
@@ -209,7 +209,7 @@ def build_background():
         x += rng.randint(30, 80)
     pts.append((W, C.FLOOR_Y))
     pygame.draw.polygon(bg, (24, 12, 40), pts)
-    # zemin ızgarası (perspektif)
+    # floor grid (perspective)
     floor = pygame.Rect(0, C.FLOOR_Y, W, H - C.FLOOR_Y)
     pygame.draw.rect(bg, (16, 8, 30), floor)
     hz = (W // 2, C.FLOOR_Y - 140)
@@ -221,6 +221,6 @@ def build_background():
         y = C.FLOOR_Y + int((H - C.FLOOR_Y) * (k / 6) ** 1.6)
         pygame.draw.line(bg, (90, 40, 140), (0, y), (W, y), 1)
     pygame.draw.line(bg, (200, 90, 255), (0, C.FLOOR_Y), (W, C.FLOOR_Y), 2)
-    # ufuk parıltısı
+    # horizon glow
     blit_glow(bg, (W // 2, C.FLOOR_Y), 520, (60, 20, 80))
     return bg

@@ -1,10 +1,10 @@
-"""Ana oyun: durum makinesi, çarpışmalar ve arayüz.
+"""Main game: state machine, collisions and user interface.
 
-İki mod var:
-  * solo   — tek oyuncu boss'a karşı (title → countdown → fight → victory/defeat)
-  * versus — iki oyuncu karşı karşıya, 3 rauntta 2 kazanan
+There are two modes:
+  * solo   — one player against the boss (title → countdown → fight → victory/defeat)
+  * versus — two players against each other, best of 3 rounds
              (title → countdown → fight → round_end → ... → match_end)
-Versus'ta kamera ikiye bölünür: görüntünün sol yarısındaki el P1 (solda), sağ yarısındaki el P2 (sağda).
+In versus the camera image is split in half: the hand in the left half is P1 (left), the right half is P2 (right).
 """
 import math
 import random
@@ -33,7 +33,7 @@ TIPS = [
     "VERSUS: index + pinky puts up a MIRROR that sends enemy shots back for 3 seconds.",
 ]
 DIFFS = ["easy", "normal", "hard"]
-CLASH_RANK = {"punch": 0, "fire": 1, "reflect": 2}  # versus: çarpışan mermilerden güçlü olan devam eder
+CLASH_RANK = {"punch": 0, "fire": 1, "reflect": 2}  # versus: when two shots collide, the stronger one continues
 
 
 def new_stats():
@@ -45,7 +45,9 @@ class Game:
     def __init__(self, args):
         pygame.mixer.pre_init(44100, -16, 2, 512)
         pygame.init()
-        flags = pygame.SCALED | (pygame.FULLSCREEN if args.fullscreen else 0)
+        # The game opens in fullscreen (the 1280x720 canvas is scaled to the monitor); F toggles a window
+        self.fullscreen = not args.windowed
+        flags = pygame.SCALED | (pygame.FULLSCREEN if self.fullscreen else 0)
         self.screen = pygame.display.set_mode((W, H), flags)
         pygame.display.set_caption("Gesture Fighter — ME461")
         self.clock = pygame.time.Clock()
@@ -72,7 +74,7 @@ class Game:
         self.debug = False
         self.paused = False
         self.running = True
-        self.max_frames = args.frames  # test için: N kare sonra çık
+        self.max_frames = args.frames  # for automated tests: quit after N frames
         self.frame = 0
 
         self.particles = Particles()
@@ -82,7 +84,7 @@ class Game:
         self.boss.x = self.boss.home_x
         self.boss.set_state("gloat")
         self.set_state("title")
-        if args.versus:  # --versus: menüyü atla
+        if args.versus:  # --versus: skip the menu
             self.start_match("versus")
 
     # ================================================================== setup
@@ -91,7 +93,7 @@ class Game:
         return self.mode == "versus"
 
     def set_mode(self, mode):
-        """solo / versus arasında geçiş: kamera bölünmesi ve kontrolcüler."""
+        """Switch between solo and versus: camera split and controllers."""
         self.mode = mode
         tr = self.tracker
         if tr:
@@ -109,7 +111,7 @@ class Game:
         self.state = s
         self.state_t = 0.0
         self.holds = {}
-        self.armed = set()  # el önce bırakılmalı (kalkanı tutarken kazara yeniden başlamasın)
+        self.armed = set()  # the hand must be released first (so holding the shield does not restart by accident)
         self.sound.play_music(self.music_for_state())
 
     def music_for_state(self):
@@ -124,7 +126,7 @@ class Game:
         self.new_fight()
 
     def new_fight(self):
-        """Yeni dövüş (solo) ya da yeni raunt (versus)."""
+        """A new fight (solo) or a new round (versus)."""
         if self.versus:
             self.players = [Fighter(C.VS_P1_X, 1, C.P1_COLOR, "P1"), Fighter(C.VS_P2_X, -1, C.P2_COLOR, "P2")]
             for p in self.players:
@@ -135,7 +137,7 @@ class Game:
             self.players = [Fighter(color=C.P1_COLOR, name="YOU")]
             self.boss = Boss(self.difficulty)
         for p, st in zip(self.players, self.match_stats):
-            p.stats = st  # istatistikler raunt boyunca birikir
+            p.stats = st  # statistics accumulate over the rounds
         self.projectiles = []
         self.lasers = []
         self.mirrors = []
@@ -157,7 +159,7 @@ class Game:
         return self.players[1] if p is self.players[0] else self.players[0]
 
     def pick_target(self):
-        """Boss'un hedefi (solo modda tek oyuncu)."""
+        """The boss's target (the only player in solo mode)."""
         alive = [p for p in self.players if p.hp > 0]
         return alive[0] if alive else None
 
@@ -188,8 +190,8 @@ class Game:
                 k = e.key
                 if k == pygame.K_F1:
                     self.debug = not self.debug
-                elif k == pygame.K_F11:
-                    pygame.display.toggle_fullscreen()
+                elif k in (pygame.K_f, pygame.K_F11):
+                    self.toggle_fullscreen()
                 elif k == pygame.K_m:
                     self.sound.enabled = not self.sound.enabled and bool(self.sound.sounds)
                     if self.sound.enabled:
@@ -220,6 +222,21 @@ class Game:
                     elif k == pygame.K_ESCAPE:
                         self.go_title()
 
+    def toggle_fullscreen(self):
+        """Switch between fullscreen and a window (key F or F11)."""
+        self.fullscreen = not self.fullscreen
+        try:
+            ok = pygame.display.toggle_fullscreen()
+        except pygame.error:
+            ok = 0
+        if not ok:  # some platforms cannot toggle in place: recreate the window instead
+            flags = pygame.SCALED | (pygame.FULLSCREEN if self.fullscreen else 0)
+            try:
+                self.screen = pygame.display.set_mode((W, H), flags)
+            except pygame.error as e:  # never crash over a display mode: keep the current one
+                self.fullscreen = not self.fullscreen
+                print(f"[game] Could not switch fullscreen mode: {e}")
+
     def go_title(self):
         self.paused = False
         self.sound.pause_music(False)
@@ -242,7 +259,7 @@ class Game:
         self.sound.play("beep")
 
     def hold_confirm(self, key, active, dt, duration=1.2, lockout=1.0):
-        """Bir hareketi `duration` saniye tutunca True döner. Önce elin bırakılması gerekir."""
+        """Returns True after a gesture has been held for `duration` seconds. The hand must be released first."""
         if not active:
             self.armed.add(key)
             self.holds[key] = max(0.0, self.holds.get(key, 0.0) - dt * 2)
@@ -276,8 +293,8 @@ class Game:
             if self.state_t >= 3.0:
                 self.set_state("fight")
                 for p in self.players:
-                    # Geri sayımda tutulan hareket (ör. 🤟) dövüşün ilk karesinde "yeni" sayılsın;
-                    # yoksa oyuncu eli indirip tekrar yapmadan ayna/özel tetiklenmez.
+                    # A gesture held during the countdown (e.g. 🤟) counts as new on the first frame of the fight;
+                    # otherwise the mirror/special would not fire until the player released and repeated it.
                     p.gesture = Gesture.NONE
                     p.shield_on = False
                 if self.boss:
@@ -298,7 +315,7 @@ class Game:
         p.y += (p.target_y - p.y) * min(1.0, dt * 12)
 
     def update_idle_actors(self, dt):
-        """Menü/geri sayım/sonuç: oyuncular sadece hareket eder ve elini gösterir, saldırı yok."""
+        """Menu / countdown / results: players only move and show their gesture, no attacks."""
         for p, ctrl in zip(self.players, self.controls):
             p.update_timers(dt)
             if p.hp > 0:
@@ -401,7 +418,7 @@ class Game:
                 self.particles.burst(b.x, b.y, (255, 255, 255), n=160, speed=(150, 900), life=(0.6, 1.6),
                                      size=(3, 8))
                 self.particles.burst(b.x, b.y, b.color, n=120, speed=(100, 600), life=(0.6, 1.6))
-                b.set_state("dead")  # boss yok oldu
+                b.set_state("dead")  # the boss is gone
                 self.shake.add(25)
                 self.sound.play("explosion")
                 self.sound.play("win")
@@ -419,7 +436,7 @@ class Game:
         p.gesture = g
         locked = p.beam is not None
 
-        # kalkan
+        # shield
         want = g is Gesture.PALM and p.guard_break <= 0 and not locked and p.energy > 1
         if want and not p.shield_on:
             p.shield_on = True
@@ -442,7 +459,7 @@ class Game:
             p.pending = None
             return
 
-        # saldırılar: hareket yeni yapıldığında hemen, tutulursa belirli aralıkla tekrar
+        # attacks: fire as soon as the gesture is made, then repeat at a fixed rate while it is held
         if g in (Gesture.FIST, Gesture.POINT):
             spec = C.PUNCH if g is Gesture.FIST else C.FIRE
             if entered:
@@ -464,7 +481,7 @@ class Game:
             self.try_mirror(p)
 
     def fighter_fx(self, p, dt):
-        """Karakter efektleri: özel hazır parıltısı, ışın aurası, ölünce partiküllere dağılma."""
+        """Character effects: special-ready glow, beam aura, dissolving into particles on death."""
         if p.hp <= 0:
             if not p.dissolved and p.dead_t >= Fighter.DISSOLVE_AT:
                 p.dissolved = True
@@ -487,12 +504,12 @@ class Game:
                         cooldown=1.5, font=self.fonts.mid)
             self.particles.burst(p.x, p.y, C.C_SPECIAL, n=30, speed=(80, 320), life=(0.3, 0.7))
         p.was_ready = ready
-        if ready and random.random() < dt * 30:  # ayak altından yükselen altın kıvılcımlar
+        if ready and random.random() < dt * 30:  # gold sparks rising from the feet
             self.particles.emit(p.x + random.uniform(-36, 36), C.FLOOR_Y - random.uniform(0, 16),
                                 random.uniform(-20, 20), random.uniform(-230, -120),
                                 random.choice([C.C_SPECIAL, C.C_SPECIAL, (255, 250, 220)]),
                                 life=random.uniform(0.5, 0.9), size=random.uniform(2, 3.5), drag=0.6)
-        if p.beam is not None and random.random() < dt * 45:  # ışın atarken gövdeden dışa saçılan aura
+        if p.beam is not None and random.random() < dt * 45:  # aura scattering out from the body while firing the beam
             a = random.uniform(0, math.tau)
             self.particles.emit(p.x + math.cos(a) * 46, p.y + math.sin(a) * 64, math.cos(a) * 160,
                                 math.sin(a) * 160 - 40, random.choice([C.C_SPECIAL, (255, 150, 40), C.WHITE]),
@@ -545,7 +562,7 @@ class Game:
             self.sound.play("fizzle")
 
     def try_mirror(self, p):
-        """🤟: rakip mermilerini geri yansıtan aynayı ortaya koyar (sadece versus)."""
+        """🤟: places the mirror that reflects the opponent's shots (versus only)."""
         if not self.versus:
             self.notify(f"mirror{p.name}", "MIRROR: 2-player only", p.x + 30, p.y - 100, C.C_MIRROR)
             return
@@ -567,7 +584,7 @@ class Game:
         p.stats["mirrors"] += 1
         self.sound.play("mirror_cast")
         self.shake.add(6)
-        # elden aynaya uçan kıvılcımlar + aynanın boyunca parıltı
+        # sparks flying from the hand to the mirror + sparkle along the mirror
         hx, hy = p.hand_pos
         for _ in range(26):
             self.particles.emit(hx, hy, (x - hx) * random.uniform(1.2, 2.2), random.uniform(-160, 160),
@@ -589,7 +606,7 @@ class Game:
         self.sound.play("fizzle")
         self.shake.add(8)
 
-    # ------------------------------------------------------------------ world api (boss kullanır)
+    # ------------------------------------------------------------------ world api (used by the boss)
     def spawn(self, proj):
         self.projectiles.append(proj)
 
@@ -611,13 +628,13 @@ class Game:
         self.shake.add(16)
         self.particles.burst(self.boss.x, self.boss.y, self.boss.color, n=80, speed=(100, 600), life=(0.4, 1.2))
 
-    # ------------------------------------------------------------------ combat (ortak)
+    # ------------------------------------------------------------------ combat (shared)
     @staticmethod
     def combo_mult(p):
         return 1.0 + min(C.COMBO_BONUS_MAX, max(0, p.combo - 1) * C.COMBO_BONUS_PER_HIT)
 
     def register_hit(self, p, dmg, kind):
-        """Saldıran oyuncunun kombo/istatistik/özel bar güncellemesi. Kombo çarpanlı hasarı döndürür."""
+        """Updates the attacker's combo, stats and special bar. Returns the damage with the combo bonus."""
         p.combo += 1
         p.combo_timer = C.COMBO_WINDOW
         p.stats["max_combo"] = max(p.stats["max_combo"], p.combo)
@@ -664,7 +681,7 @@ class Game:
             self.guard_break(p)
 
     def parry(self, p, pr, target_pos, dmg):
-        """Mermiyi `target_pos`'a doğru geri gönderir; artık `p`'nin mermisi ve `dmg` hasar verir."""
+        """Sends the shot back towards `target_pos`; it now belongs to `p` and deals `dmg` damage."""
         pr.owner = "player"
         pr.shooter = p
         pr.kind = "reflect"
@@ -729,7 +746,7 @@ class Game:
                         if b.state == "transition":
                             self.notify("immune", "IMMUNE", b.x - 60, b.y - 120, (200, 200, 220))
                 continue
-            # --- boss mermisi
+            # --- boss projectile
             if pr.kind == "missile":
                 for q in self.projectiles:
                     if q.alive and q.owner == "player" and \
@@ -858,7 +875,7 @@ class Game:
     # ------------------------------------------------------------------ combat: versus
     def collide_versus(self):
         prs = self.projectiles
-        # karşı karşıya gelen mermiler: güçlü olan devam eder, eşitse ikisi de yok olur
+        # shots that meet: the stronger one continues, equal ones destroy each other
         for i, pr in enumerate(prs):
             if not pr.alive:
                 continue
@@ -903,17 +920,17 @@ class Game:
                     self.hitstop = max(self.hitstop, 0.08)
 
     def mirror_reflect(self):
-        """Aktif aynaya, sahibine doğru gelen rakip mermileri geri döner ve aynanın sahibine ait olur."""
+        """Opponent shots heading towards an active mirror's owner bounce back and now belong to the owner."""
         for m in self.mirrors:
             if not m.active:
                 continue
             owner = m.owner
-            side = 1 if owner.x > m.x else -1  # sahibinin aynaya göre tarafı
+            side = 1 if owner.x > m.x else -1  # which side of the mirror its owner is on
             for pr in self.projectiles:
                 if not pr.alive or pr.shooter is None or pr.shooter is owner:
                     continue
                 if getattr(pr, "bounces", 0) >= C.MIRROR_MAX_BOUNCES:
-                    continue  # zaten yansımış: iki ayna arasında sonsuz sekmesin, geçip gitsin
+                    continue  # already reflected: pass through, so it never bounces forever between two mirrors
                 if not (Mirror.TOP <= pr.y <= Mirror.BOTTOM) or pr.vx * side <= 0:
                     continue
                 if abs(pr.x - m.x) > pr.radius + 15:
@@ -946,10 +963,10 @@ class Game:
         self.beam_particles(p, beam)
         y, x0 = beam.y, beam.x0
         opp = self.opponent(p)
-        # rakibin aynası ışını keser: ışın aynada biter, rakip hasar almaz
+        # the opponent's mirror cuts the beam: it ends at the mirror and the opponent takes no damage
         wall = next((m for m in self.mirrors if m.owner is opp and m.active and (m.x - x0) * p.facing > 0), None)
         beam.stop_x = wall.x if wall else None
-        # ışın, rakibin mermilerini yok eder
+        # the beam destroys the opponent's shots
         for pr in self.projectiles:
             if pr.alive and pr.shooter is opp and abs(pr.y - y) < beam.half_h + pr.radius and \
                     (pr.x - x0) * p.facing > 0 and (wall is None or (wall.x - pr.x) * p.facing > 0):
@@ -967,7 +984,7 @@ class Game:
         if self.end_kind is not None or opp.hp <= 0 or abs(opp.y - y) > beam.half_h + 45:
             return
         dmg = beam.dps * dt * self.combo_mult(p)
-        if opp.shield_on:  # kalkan ışını büyük ölçüde durdurur ama enerjiyi hızla eritir
+        if opp.shield_on:  # a shield stops most of the beam but drains energy fast
             opp.energy -= C.VS_BEAM_BLOCK_DRAIN * dt
             opp.energy_delay = C.ENERGY_REGEN_DELAY
             dmg *= C.VS_BEAM_CHIP
@@ -1004,7 +1021,7 @@ class Game:
         for p in self.players:
             p.beam = None
             p.shield_on = False
-        for m in self.mirrors:  # raunt bitince aynalar sönsün
+        for m in self.mirrors:  # mirrors fade out when the round ends
             m.duration = min(m.duration, m.t + 0.4)
         perfect = winner.hp >= winner.max_hp
         title = banner or ("PERFECT!" if perfect else "K.O.!")
@@ -1080,7 +1097,7 @@ class Game:
         if self.boss and self.boss.state != "dead":
             self.boss.draw(w, self)
         for p in self.players:
-            p.draw(w, self.fonts)  # ölü karakter düşüp dağılana kadar çizilir
+            p.draw(w, self.fonts)  # a dead character is drawn until it has fallen and dissolved
             if self.versus and p.hp > 0:
                 text(w, self.fonts.tiny, p.name, (p.x, p.y - 96), p.color)
         for m in self.mirrors:
@@ -1129,13 +1146,13 @@ class Game:
         rects = [pygame.Rect(14, 10, 404, 84), pygame.Rect(W - 418, 10, 404, 84)]
         for k, (p, r) in enumerate(zip(self.players, rects)):
             self.draw_player_panel_compact(p, r, mirror=k == 1)
-            # raunt galibiyetleri
+            # round wins
             for i in range(C.VS_ROUNDS_TO_WIN):
                 x = r.x + 24 + i * 28 if k == 0 else r.right - 24 - i * 28
                 won = self.wins[k] > i
                 pygame.draw.circle(s, (20, 14, 30), (x, r.bottom + 18), 11)
                 pygame.draw.circle(s, p.color if won else (70, 64, 90), (x, r.bottom + 18), 8)
-            # ayna hazır mı?
+            # is the mirror ready?
             ready = p.mirror_cd <= 0 and p.energy >= C.MIRROR_ENERGY
             label = "MIRROR READY" if ready else (f"MIRROR {int(math.ceil(p.mirror_cd))}s" if p.mirror_cd > 0
                                                   else "MIRROR: energy")
@@ -1178,7 +1195,7 @@ class Game:
             text(s, f.tiny, f"+{int((self.combo_mult(p) - 1) * 100)}% damage", (26, 214), C.WHITE, "topleft")
 
     def draw_player_panel_compact(self, p, r, mirror=False):
-        """Versus için küçük panel; P2'de (mirror) her şey ayna simetrisi, barlar sağdan dolar."""
+        """Compact panel for versus; for P2 (mirror=True) everything is mirrored and bars fill from the right."""
         s, f = self.screen, self.fonts
         panel(s, r, border=p.color)
         hp_frac = p.hp / p.max_hp
@@ -1189,7 +1206,7 @@ class Game:
         en_col = C.C_ENERGY if p.guard_break <= 0 else (110, 110, 130)
 
         def mx(x, w=0):
-            """Sol paneldeki x konumunu, sağ panel için aynala."""
+            """Mirror an x position of the left panel for the right panel."""
             return r.right - (x - r.x) - w if mirror else x
 
         a_l, a_r = ("topright", "topleft") if mirror else ("topleft", "topright")
@@ -1265,7 +1282,7 @@ class Game:
             surf = pygame.transform.smoothscale(img, rect.size)
             self._preview = (surf, fid, rect.size)
         s.blit(surf, rect)
-        # el yüksekliği aralığı kılavuzu
+        # guide lines for the hand height band
         for v in (C.HAND_Y_MIN, C.HAND_Y_MAX):
             yy = rect.y + int(v * rect.h)
             for x in range(rect.x, rect.right, 16):
@@ -1297,7 +1314,7 @@ class Game:
                 text(s, f.mid if big else f.small, "SHOW YOUR HAND", rect.center, (255, 200, 80))
             border = GESTURE_COLOR[h.gesture] if h is not None else (90, 90, 110)
         pygame.draw.rect(s, border, rect.inflate(6, 6), 3, border_radius=8)
-        # alt etiket
+        # bottom label
         lab = pygame.Rect(rect.x, rect.bottom - 30, rect.w, 30)
         panel(s, lab, color=(0, 0, 0), alpha=150, radius=0)
         if self.versus:
@@ -1329,7 +1346,7 @@ class Game:
         text(s, f.small, "ME461  ·  Camera-controlled gesture battles", (W // 2, 140), (210, 200, 240))
         self.draw_preview(pygame.Rect(W // 2 - 200, 166, 400, 300), big=True)
 
-        # mod seçimi: açık el = boss, iki parmak = versus
+        # mode selection: open palm = boss, two fingers = versus
         y = 496
         cards = [("solo", Gesture.PALM, "1 PLAYER", "vs boss", "SPACE"),
                  ("versus", Gesture.PEACE, "2 PLAYERS", "versus", "V")]
@@ -1348,7 +1365,7 @@ class Game:
             text(s, f.tiny, f"{sub}  ·  {how}key {k}", (r.x + 73, r.y + 40), (190, 190, 210), "topleft", shadow=False)
             if prog > 0:
                 pygame.draw.rect(s, col, (r.x + 6, r.bottom - 7, int((r.w - 12) * prog), 4))
-        text(s, f.tiny, f"Boss difficulty: ◀ {self.difficulty.upper()} ▶    F11: fullscreen    ESC: quit",
+        text(s, f.tiny, f"Boss difficulty: ◀ {self.difficulty.upper()} ▶    F: fullscreen / window    ESC: quit",
              (W // 2, y + 82), (190, 190, 210))
         tip = TIPS[int(t / 4) % len(TIPS)]
         text(s, f.small, "TIP: " + tip, (W // 2, y + 112), (255, 220, 140))
@@ -1478,7 +1495,8 @@ class Game:
         ov.fill((0, 0, 0, 160))
         self.screen.blit(ov, (0, 0))
         text(self.screen, self.fonts.big, "PAUSED", (W // 2, H // 2 - 30), C.WHITE)
-        text(self.screen, self.fonts.small, "ESC / P: resume      Q: main menu", (W // 2, H // 2 + 30), (200, 200, 220))
+        text(self.screen, self.fonts.small, "ESC / P: resume      Q: main menu      F: fullscreen / window",
+             (W // 2, H // 2 + 30), (200, 200, 220))
 
     def draw_debug(self):
         boss = self.boss.state if self.boss else "-"

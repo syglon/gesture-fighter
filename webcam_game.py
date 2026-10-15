@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
-"""Gesture Fighter — ME461
+"""Gesture Fighter — ME461 (team Bad Bots)
 
-Kamera el hareketlerinizi algılar, siz de boss'a saldırırsınız:
-    ✊ Yumruk        -> PUNCH   (hızlı, hasarı az)
-    🖐 Açık el       -> SHIELD  (engeller; tam zamanında açarsan PARRY ile mermiyi geri yollar)
-    ☝ İşaret parmağı -> FIRE    (ateş topu, enerji harcar)
-    ✌ İki parmak     -> SPECIAL (özel bar doluyken dev ışın)
-    🤟 İşaret + serçe -> MIRROR  (sadece versus: rakibin mermilerini yansıtan ayna)
-Elinizi yukarı/aşağı hareket ettirerek karakteri hareket ettirirsiniz.
+The camera detects your hand gestures and you fight with them:
+    ✊ Fist            -> PUNCH   (fast, low damage)
+    🖐 Open palm       -> SHIELD  (blocks; raised just in time it PARRIES the shot back)
+    ☝ Index finger    -> FIRE    (fireball, costs energy)
+    ✌ Two fingers     -> SPECIAL (huge beam when the special bar is full)
+    🤟 Index + little  -> MIRROR  (versus only: a mirror that reflects the opponent's shots)
+Move your hand up and down to move your fighter.
 
-Çalıştırma:
+Running:
     .venv/bin/python webcam_game.py
-    .venv/bin/python webcam_game.py --camera 1 --difficulty hard --fullscreen
-    .venv/bin/python webcam_game.py --keyboard      # kamerasız test
-    .venv/bin/python webcam_game.py --versus        # iki kişilik kapışma (kamera ikiye bölünür)
+    .venv/bin/python webcam_game.py --camera 1 --difficulty hard --windowed
+    .venv/bin/python webcam_game.py --keyboard      # test without a camera
+    .venv/bin/python webcam_game.py --versus        # two-player match (the camera image is split in half)
 """
 import argparse
 import sys
@@ -27,10 +27,10 @@ def parse_args(argv=None):
     ap.add_argument("--keyboard", action="store_true", help="do not use the camera, keyboard only")
     ap.add_argument("--difficulty", choices=["easy", "normal", "hard"], default="normal", help="boss difficulty")
     ap.add_argument("--versus", action="store_true", help="start a 2-player versus match directly")
-    ap.add_argument("--fullscreen", action="store_true", help="start in fullscreen")
+    ap.add_argument("--windowed", action="store_true", help="start in a window instead of fullscreen (F toggles it)")
     ap.add_argument("--mute", action="store_true", help="no sound or music")
     ap.add_argument("--no-mirror", action="store_true", help="do not mirror the camera image")
-    ap.add_argument("--frames", type=int, default=0, help=argparse.SUPPRESS)  # otomatik test için
+    ap.add_argument("--frames", type=int, default=0, help=argparse.SUPPRESS)  # for automated tests
     return ap.parse_args(argv)
 
 

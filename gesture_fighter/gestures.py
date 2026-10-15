@@ -1,9 +1,9 @@
-"""El iskeletinden (21 MediaPipe noktası) hareket sınıflandırma.
+"""Gesture classification from the hand skeleton (21 MediaPipe landmarks).
 
-Her parmak için iki ölçüt kullanılır:
-  * bilek→uç mesafesi / bilek→PIP mesafesi oranı (açık parmakta > 1)
-  * PIP eklemindeki bükülme açısı (açık parmakta küçük)
-Bu iki ölçüt elin dönmesinden ve kameraya uzaklığından büyük ölçüde bağımsızdır.
+Two measures are used for every finger:
+  * the ratio of the wrist→tip distance to the wrist→PIP distance (> 1 for an open finger)
+  * the bend angle at the PIP joint (small for an open finger)
+Both are largely independent of the hand's rotation and of its distance from the camera.
 """
 import math
 from collections import Counter, deque
@@ -18,7 +18,7 @@ class Gesture(Enum):
     PALM = 2   # 🖐 Shield
     POINT = 3  # ☝ Fire
     PEACE = 4  # ✌ Special
-    MIRROR = 5  # 🤟 Mirror (sadece versus)
+    MIRROR = 5  # 🤟 Mirror (versus only)
 
 
 GESTURE_ACTION = {
@@ -48,7 +48,7 @@ GESTURE_COLOR = {
     Gesture.MIRROR: C.C_MIRROR,
 }
 
-# MediaPipe el topolojisi (çizim için)
+# MediaPipe hand topology (for drawing)
 HAND_CONNECTIONS = [
     (0, 1), (1, 2), (2, 3), (3, 4),
     (0, 5), (5, 6), (6, 7), (7, 8),
@@ -59,11 +59,11 @@ HAND_CONNECTIONS = [
 ]
 
 WRIST = 0
-# (MCP, PIP, TIP) — işaret, orta, yüzük, serçe
+# (MCP, PIP, TIP) — index, middle, ring, little finger
 FINGERS = [(5, 6, 8), (9, 10, 12), (13, 14, 16), (17, 18, 20)]
 
 EXTEND_RATIO = 1.10
-EXTEND_MAX_BEND = 70.0  # derece
+EXTEND_MAX_BEND = 70.0  # degrees
 
 
 def _sub(a, b):
@@ -87,7 +87,7 @@ def _angle(u, v):
 
 
 def finger_states(pts):
-    """pts: 21 adet (x, y, z), eksenleri aynı ölçekte. 4 parmak için açık/kapalı listesi döner."""
+    """pts: 21 (x, y, z) points with equally scaled axes. Returns open/closed for the 4 long fingers."""
     wrist = pts[WRIST]
     states = []
     for mcp, pip, tip in FINGERS:
@@ -98,7 +98,7 @@ def finger_states(pts):
 
 
 def classify(pts):
-    """21 noktadan Gesture döndürür. Başparmak bilerek yok sayılır (en gürültülü parmak)."""
+    """Returns a Gesture from the 21 points. The thumb is ignored on purpose (it is the noisiest finger)."""
     index, middle, ring, pinky = finger_states(pts)
     n = index + middle + ring + pinky
     if n == 0:
@@ -110,12 +110,12 @@ def classify(pts):
     if index and middle and not ring and not pinky:
         return Gesture.PEACE
     if index and pinky and not middle and not ring:
-        return Gesture.MIRROR  # 🤟 / 🤘 (başparmak yine yok sayılır)
+        return Gesture.MIRROR  # 🤟 / 🤘 (the thumb is still ignored)
     return Gesture.NONE
 
 
 class GestureFilter:
-    """Titremeyi önlemek için çoğunluk oylaması yapan küçük filtre."""
+    """A small majority-vote filter that removes flicker."""
 
     def __init__(self, window=C.GESTURE_WINDOW, required=C.GESTURE_REQUIRED):
         self.history = deque(maxlen=window)

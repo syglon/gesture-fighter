@@ -1,5 +1,13 @@
 # Gesture Fighter — ME461
 
+**Team Bad Bots**
+
+| Member |
+|---|
+| Rahmi Eren Çakır |
+| Mert Koçoğlu |
+| Efe Keleş |
+
 A 2D fighting game controlled entirely by **hand gestures in front of a webcam**. No keyboard, mouse or
 controller is needed: the camera finds your hand with MediaPipe, a rule-based classifier recognises the
 gesture, and the game turns it into an attack, a shield or a special move.
@@ -42,6 +50,9 @@ python -m venv .venv
 .venv\Scripts\python webcam_game.py
 ```
 
+The game opens in **fullscreen**. Press **`F`** at any time to switch to a window, and `F` again to go back
+to fullscreen.
+
 **Command-line options**
 
 | Option | Effect |
@@ -50,7 +61,7 @@ python -m venv .venv
 | `--difficulty easy\|normal\|hard` | Boss difficulty (default `normal`; also changeable in the menu with ◀ ▶) |
 | `--camera N` | Use camera number N (default 0) |
 | `--keyboard` | Do not use the camera; play with the keyboard only |
-| `--fullscreen` | Start in fullscreen (F11 toggles it during the game) |
+| `--windowed` | Start in a 1280×720 window instead of fullscreen |
 | `--mute` | No sound or music |
 | `--no-mirror` | Do not mirror the camera image |
 
@@ -100,7 +111,7 @@ Holding a key is the same as holding the gesture.
 |---|---|
 | `ESC` / `P` | Pause / resume during a fight (`Q` while paused returns to the menu); `ESC` in the main menu quits |
 | `F1` | Debug panel (FPS, raw and filtered gesture, finger states, tracker FPS) |
-| `F11` | Toggle fullscreen |
+| `F` (or `F11`) | Switch between fullscreen and a window |
 | `M` | Mute / unmute sound and music |
 | `◀` `▶` (or `A` `D`) | Change boss difficulty in the main menu |
 

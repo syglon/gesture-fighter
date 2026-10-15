@@ -1,1 +1,1 @@
-"""Gesture Fighter — kamera ile el hareketleri kullanılarak oynanan boss savaşı (ME461)."""
+"""Gesture Fighter — a fighting game played with hand gestures in front of a webcam (ME461)."""

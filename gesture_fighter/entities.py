@@ -1,4 +1,4 @@
-"""Oyun nesneleri: mermiler, lazerler, özel ışın, oyuncu (Fighter) ve Boss."""
+"""Game objects: projectiles, lasers, the special beam, the mirror, the player (Fighter) and the boss."""
 import math
 import random
 from collections import deque
@@ -26,8 +26,8 @@ class Projectile:
         self.kind = kind            # punch | fire | reflect | orb | missile | wall
         self.color = color
         self.homing = homing
-        self.shooter = None     # mermiyi atan oyuncu (istatistik / versus)
-        self.target = None      # güdümlü füzenin hedefi
+        self.shooter = None     # the player who fired the shot (stats / versus)
+        self.target = None      # target of a homing missile
         self.alive = True
         self.age = 0.0
         self.trail = deque(maxlen=9)
@@ -53,7 +53,7 @@ class Projectile:
         if self.x < -60 or self.x > C.SCREEN_W + 60 or self.y < ARENA_LIMIT_TOP:
             self.alive = False
         elif self.y > C.FLOOR_Y - self.radius * 0.5:
-            self.alive = False  # zemine çarptı
+            self.alive = False  # hit the floor
             game.particles.burst(self.x, C.FLOOR_Y, self.color, n=10, speed=(60, 220), life=(0.15, 0.4),
                                  angle=-math.pi / 2, spread=2.2)
 
@@ -72,7 +72,7 @@ class Projectile:
             blit_glow(surf, (x, y), r * 2.4, (150, 40, 30))
             pygame.draw.polygon(surf, (255, 80, 60), pts)
             pygame.draw.polygon(surf, (255, 220, 200), pts, 2)
-            # vurulabilir olduğunu gösteren nişangah
+            # crosshair showing that it can be shot down
             pygame.draw.circle(surf, (255, 255, 255), (x, y), int(r * 1.7), 1)
             return
         flick = 1.0 + (0.15 * math.sin(self.age * 40) if self.kind == "fire" else 0.0)
@@ -91,7 +91,7 @@ ARENA_LIMIT_TOP = C.ARENA_TOP - 80
 
 
 class Laser:
-    """Uyarı süresi boyunca yanıp söner, sonra yatay bir ışın olarak ateşlenir."""
+    """Blinks during its warning time, then fires as a horizontal beam."""
 
     def __init__(self, y, warn, duration, damage, half_h=32, x_end=None, color=(255, 60, 120)):
         self.y = y
@@ -103,8 +103,8 @@ class Laser:
         self.color = color
         self.t = 0.0
         self.alive = True
-        self.hit = set()         # vurduğu oyuncular (id)
-        self.blocked_by = set()  # kalkanla karşılayan oyuncular (id)
+        self.hit = set()         # players it has hit (ids)
+        self.blocked_by = set()  # players who blocked it with a shield (ids)
         self.started = False
 
     @property
@@ -153,7 +153,7 @@ class SpecialBeam:
         self.half_h = 46
         self.dmg_accum = 0.0
         self.color = C.C_SPECIAL
-        self.stop_x = None  # bir ayna ışını keserse ışın burada biter
+        self.stop_x = None  # if a mirror cuts the beam, the beam ends here
 
     @property
     def y(self):
@@ -201,12 +201,12 @@ class SpecialBeam:
 
 
 class Mirror:
-    """Versus'ta 🤟 ile ortaya konan ayna: rakibin mermilerini sahibine değil rakibe geri yansıtır.
+    """The mirror placed with 🤟 in versus: it sends the opponent's shots back at the opponent.
 
-    Tek yönlüdür: sahibinin kendi mermileri içinden geçer. Rakibin özel ışınını da keser.
+    It is one-way: its owner's own shots pass through. It also stops the opponent's special beam.
     """
 
-    TOP = C.ARENA_TOP + 40  # süre kutusunun altından başlar
+    TOP = C.ARENA_TOP + 40  # starts below the timer box
     BOTTOM = C.FLOOR_Y - 14
 
     def __init__(self, owner, x):
@@ -220,7 +220,7 @@ class Mirror:
 
     @property
     def strength(self):
-        """0..1 — açılış ve kapanış animasyonu."""
+        """0..1 — opening and closing animation."""
         return max(0.0, min(1.0, self.t / 0.18) * min(1.0, (self.duration - self.t) / 0.4))
 
     @property
@@ -252,16 +252,16 @@ class Mirror:
         glass = pygame.Surface((w + 40, h), pygame.SRCALPHA)
         pygame.draw.rect(glass, (*C.C_MIRROR, int(80 * k)), (20, 0, w, h), border_radius=6)
         pygame.draw.rect(glass, (255, 255, 255, int(45 * k)), (24, 0, 7, h))
-        # cam üzerinde kayan parlama
+        # shine sliding over the glass
         sy = (self.t * 520) % (h + 220) - 110
         pygame.draw.polygon(glass, (255, 255, 255, int(150 * k)),
                             [(20, sy), (20 + w, sy - 44), (20 + w, sy - 14), (20, sy + 30)])
         pygame.draw.rect(glass, (*col, int(230 * k)), (20, 0, w, h), 3, border_radius=6)
         surf.blit(glass, (x - w // 2 - 20, y0))
-        # çerçevenin üst ve alt başlıkları
+        # top and bottom caps of the frame
         for yy in (y0 - 6, y0 + h - 6):
             pygame.draw.rect(surf, scale_color(col, k), (x - w // 2 - 8, yy, w + 16, 12), border_radius=5)
-        # pırıltılar
+        # sparkles
         for i in range(7):
             tw = 0.5 + 0.5 * math.sin(self.t * 7 + i * 1.7)
             if tw < 0.35:
@@ -278,23 +278,23 @@ class Mirror:
 
 
 # ====================================================================== fighter
-# Her hareketin vücut pozu. Değerler piksel; bx/by arka elin gövdeye göre konumu (bx yüz yönünde +).
-# lean: gövdenin öne eğilmesi, crouch: çömelme, reach/hand_dy: ön elin uzanması/yüksekliği, stance: bacak açıklığı
+# Body pose for each gesture. Values are pixels; bx/by is the back hand's position relative to the body (bx + = facing direction).
+# lean: forward lean of the body, crouch: crouch depth, reach/hand_dy: front hand reach/height, stance: leg spread
 POSES = {
     Gesture.NONE:   dict(lean=0, crouch=0, reach=0, hand_dy=0, bx=-22, by=2, stance=16),
-    Gesture.FIST:   dict(lean=9, crouch=5, reach=4, hand_dy=2, bx=6, by=-14, stance=21),     # öne atılma, arka el çenede
-    Gesture.PALM:   dict(lean=-6, crouch=11, reach=-4, hand_dy=-2, bx=24, by=4, stance=25),  # geri yaslanıp çömelme
-    Gesture.POINT:  dict(lean=4, crouch=3, reach=10, hand_dy=-3, bx=28, by=-8, stance=19),   # arka el nişan kolunu destekler
-    Gesture.PEACE:  dict(lean=1, crouch=9, reach=8, hand_dy=-4, bx=34, by=-10, stance=29),   # geniş duruş, iki el önde
-    Gesture.MIRROR: dict(lean=2, crouch=0, reach=2, hand_dy=-16, bx=-16, by=-2, stance=18),  # el havada
+    Gesture.FIST:   dict(lean=9, crouch=5, reach=4, hand_dy=2, bx=6, by=-14, stance=21),     # lunges forward, back hand at the chin
+    Gesture.PALM:   dict(lean=-6, crouch=11, reach=-4, hand_dy=-2, bx=24, by=4, stance=25),  # leans back and crouches
+    Gesture.POINT:  dict(lean=4, crouch=3, reach=10, hand_dy=-3, bx=28, by=-8, stance=19),   # back hand supports the aiming arm
+    Gesture.PEACE:  dict(lean=1, crouch=9, reach=8, hand_dy=-4, bx=34, by=-10, stance=29),   # wide stance, both hands forward
+    Gesture.MIRROR: dict(lean=2, crouch=0, reach=2, hand_dy=-16, bx=-16, by=-2, stance=18),  # hand raised
 }
 
 
 class Fighter:
-    """Oyuncu karakteri. `facing` sayesinde iki kişilik modda sağ tarafta da kullanılabilir."""
+    """The player character. Thanks to `facing` it can also stand on the right side in versus."""
 
     BONES = [("neck", "hip"), ("hip", "foot1"), ("hip", "foot2"), ("neck", "back"), ("neck", "hand")]
-    DISSOLVE_AT = 1.2  # ölümden bu kadar sonra (oyun süresi) karakter partiküllere dağılır
+    DISSOLVE_AT = 1.2  # this long after death (game time) the character dissolves into particles
 
     def __init__(self, x=C.PLAYER_X, facing=1, color=(90, 220, 255), name="P1"):
         self.x = x
@@ -352,7 +352,7 @@ class Fighter:
 
     @property
     def fall(self):
-        """0 → 1: ölünce geriye düşüş, sonunda küçük bir sekme."""
+        """0 → 1: the backward fall on death, with a small bounce at the end."""
         t = self.dead_t / 0.45
         if t < 1:
             return t * t
@@ -364,7 +364,7 @@ class Fighter:
         if self.beam is not None:
             return POSES[Gesture.PEACE]
         if self.gesture is Gesture.PALM and not self.shield_on:
-            return POSES[Gesture.NONE]  # guard break: kalkan yok, poz da yok
+            return POSES[Gesture.NONE]  # guard break: no shield, so no shield pose either
         return POSES[self.gesture]
 
     def update_timers(self, dt):
@@ -380,29 +380,29 @@ class Fighter:
         self.combo_timer -= dt
         if self.combo_timer <= 0:
             self.combo = 0
-        k = min(1.0, dt * 14)  # pozlar arasında yumuşak geçiş
+        k = min(1.0, dt * 14)  # smooth blend between poses
         for key, v in self._pose_target().items():
             self.pose[key] += (v - self.pose[key]) * k
         if self.hp <= 0:
             self.dead_t += dt
 
     def skeleton(self):
-        """Eklem noktaları (dünya koordinatı): poz karışımı ve ölüm düşüşü uygulanmış."""
+        """Joint positions (world coordinates) with the pose blend and the death fall applied."""
         P, f = self.pose, self.facing
         dead = self.hp <= 0
         x = self.x
         y = self.y + (0.0 if dead else math.sin(self.t * 3) * 3)
         lean = P["lean"]
         if self.gesture is Gesture.POINT:
-            lean -= 7 * self.attack_anim  # ateşin geri tepmesi
+            lean -= 7 * self.attack_anim  # fireball recoil
         elif self.gesture is Gesture.FIST:
-            lean += 5 * self.attack_anim  # yumrukla öne atılma
+            lean += 5 * self.attack_anim  # lunge with the punch
         cr = P["crouch"]
         fall = min(1.0, self.fall) if dead else 0.0
         stance = lerp(P["stance"], 5, fall)
         hand = self.hand_pos
         back = (x + f * (P["bx"] + lean * 0.5), y + P["by"] + cr)
-        if dead:  # kollar gevşer
+        if dead:  # arms go limp
             hand = (lerp(hand[0], x + f * 20, fall), lerp(hand[1], y + 10, fall))
             back = (lerp(back[0], x - f * 10, fall), lerp(back[1], y + 12, fall))
         pts = {
@@ -415,7 +415,7 @@ class Fighter:
             "back": back,
         }
         if dead:
-            # ayakların etrafında geriye döner, geri kayar ve yere iner
+            # rotates backwards around the feet, slides back and lands
             px, py = x, y + 58
             ang = -f * self.fall * math.pi / 2
             nx = px - f * 46 * min(1.0, self.dead_t / 0.5)
@@ -435,7 +435,7 @@ class Fighter:
         mid_x = (pts["head"][0] + pts["hip"][0]) / 2 if dead else self.x
         pulse = 0.5 + 0.5 * math.sin(self.t * 6)
 
-        # zemindeki gölge
+        # shadow on the floor
         h_above = C.FLOOR_Y - max(pts["foot1"][1], pts["foot2"][1])
         sw = max(30, 70 - h_above * 0.08)
         if dead:
@@ -445,7 +445,7 @@ class Fighter:
         surf.blit(shadow, (int(mid_x - sw), C.FLOOR_Y - 6))
 
         ready = self.special_ready
-        if ready:  # özel hazır: ayak altında altın halkalar
+        if ready:  # special ready: gold rings at the feet
             for k, alpha in (((self.t * 1.2) % 1.0, None), (pulse, 1.0)):
                 rw = 40 + 50 * k if alpha is None else 62 + 8 * k
                 a = int(200 * (1 - k)) if alpha is None else int(110 + 110 * k)
@@ -454,12 +454,12 @@ class Fighter:
                 surf.blit(ring, (int(self.x - ring.get_width() / 2), int(C.FLOOR_Y - ring.get_height() / 2)))
 
         if not dead and self.iframes > 0 and int(self.iframes * 14) % 2 == 0:
-            return  # hasar sonrası yanıp sönme
+            return  # blink after taking damage
 
         body = (230, 236, 255)
         if self.hurt_flash > 0:
             body = (255, int(236 * (1 - self.hurt_flash)), int(255 * (1 - self.hurt_flash)))
-        if dead and self.dead_t > 0.75:  # dağılmadan önce kendi renginde parlar ve titrer
+        if dead and self.dead_t > 0.75:  # glows in its own colour and flickers before dissolving
             k = min(1.0, (self.dead_t - 0.75) / (self.DISSOLVE_AT - 0.75))
             body = lerp_color(body, self.color, k)
             if int(self.dead_t * 30) % 2 == 0:
@@ -473,7 +473,7 @@ class Fighter:
             blit_glow(surf, center, 100, scale_color(C.C_SPECIAL, 0.18 + 0.12 * pulse))
         if self.beam is not None:
             blit_glow(surf, center, 130 + 10 * math.sin(self.t * 30), scale_color(C.C_SPECIAL, 0.5 * self.beam.intensity))
-        # atkı
+        # scarf
         sway = math.sin(self.t * 6) * 6 * (1 - (min(1.0, self.fall) if dead else 0.0))
         pygame.draw.polygon(surf, self.color, [(neck[0] - 2, neck[1] - 4), (neck[0] - f * 34, neck[1] + 4 + sway),
                                                (neck[0] - f * 30, neck[1] + 14 + sway), (neck[0] + 2, neck[1] + 6)])
@@ -482,14 +482,14 @@ class Fighter:
                 pygame.draw.line(surf, col, ip[a], ip[b], w - 2 if b in ("hand", "back") else w)
         pygame.draw.circle(surf, dark, head, 19)
         pygame.draw.circle(surf, body, head, 16)
-        if dead:  # baygın gözler
+        if dead:  # knocked-out eyes
             for dx in (-5, 5):
                 pygame.draw.line(surf, dark, (head[0] + dx - 3, head[1] - 3), (head[0] + dx + 3, head[1] + 3), 2)
                 pygame.draw.line(surf, dark, (head[0] + dx - 3, head[1] + 3), (head[0] + dx + 3, head[1] - 3), 2)
             pygame.draw.circle(surf, dark, hand, 10)
             pygame.draw.circle(surf, body, hand, 8)
             return
-        # vizör
+        # visor
         pygame.draw.rect(surf, self.color, (head[0] + (2 if f > 0 else -14), head[1] - 5, 12, 6), border_radius=3)
 
         gcol = GESTURE_COLOR[self.gesture]
@@ -521,7 +521,7 @@ class Fighter:
         c = (s.get_width() // 2, s.get_height() // 2)
         pygame.draw.circle(s, (*col, 40 if not parry else 80), c, int(r))
         pygame.draw.circle(s, (*col, 200), c, int(r), 4 if not parry else 7)
-        # altıgen desen hissi veren ön yay
+        # front arc that hints at a hexagon pattern
         rect = pygame.Rect(0, 0, int(r * 2 - 10), int(r * 2 - 10))
         rect.center = c
         a0 = -math.pi / 2.5 if self.facing > 0 else math.pi - math.pi / 2.5
@@ -539,7 +539,7 @@ PHASE_ATTACKS = {
     3: [("burst", 2), ("spread", 2), ("double_laser", 2), ("missile", 2), ("wall", 3)],
 }
 PHASE_INTERVAL = {1: 1.75, 2: 1.3, 3: 1.0}
-PHASE_MOVE = {1: (100, 0.8, 0.0), 2: (135, 1.1, 0.25), 3: (150, 1.5, 0.4)}  # genlik, hız, oyuncuyu takip
+PHASE_MOVE = {1: (100, 0.8, 0.0), 2: (135, 1.1, 0.25), 3: (150, 1.5, 0.4)}  # amplitude, speed, how much it follows the player
 ATTACK_COLORS = {"orb": (190, 110, 255), "burst": (190, 110, 255), "spread": (255, 150, 40),
                  "missile": (255, 80, 60), "wall": (255, 60, 200), "laser": (255, 60, 120),
                  "double_laser": (255, 60, 120)}
@@ -566,7 +566,7 @@ class Boss:
         self.flash = 0.0
         self.hit_shake = 0.0
         self.ghost_delay = 0.0
-        self.target = None  # şu an nişan alınan oyuncu
+        self.target = None  # the player currently being targeted
 
     # ------------------------------------------------------------------
     @property
@@ -608,13 +608,13 @@ class Boss:
         if self.ghost_delay <= 0 and self.ghost_hp > self.hp:
             self.ghost_hp = max(self.hp, self.ghost_hp - dt * (60 + (self.ghost_hp - self.hp) * 3))
 
-        # giriş animasyonu
+        # entrance animation
         if self.state == "intro":
             self.x += (self.home_x - self.x) * min(1.0, dt * 2.2)
         else:
             self.x += (self.home_x - self.x) * min(1.0, dt * 4)
 
-        # dikey hareket
+        # vertical movement
         amp, spd, follow = PHASE_MOVE[self.phase]
         if self.state in ("transition", "dying", "intro"):
             target = self.mid_y
@@ -624,12 +624,12 @@ class Boss:
             if tgt is not None:
                 target = lerp(target, tgt.y, follow)
         if self.state == "windup":
-            target = self.y  # saldırı hazırlarken sabit dur
+            target = self.y  # hold still while winding up an attack
         self.y += (target - self.y) * min(1.0, dt * 2.5)
         lo, hi = C.ARENA_TOP + self.radius + 20, C.ARENA_BOTTOM - self.radius - 30
         self.y = max(lo, min(hi, self.y))
 
-        # sıraya alınmış alt saldırılar (burst vb.)
+        # queued sub-attacks (bursts etc.)
         if self.state in ("idle", "windup"):
             for q in self.queue:
                 q[0] -= dt
@@ -657,7 +657,7 @@ class Boss:
                 self.set_state("idle")
                 self.attack_cd = 0.8
 
-        # faz geçişi
+        # phase change
         if self.state in ("idle", "windup") and self.hp > 0:
             frac = self.hp / self.max_hp
             new_phase = 1 if frac > 2 / 3 else 2 if frac > 1 / 3 else 3
@@ -753,7 +753,7 @@ class Boss:
             k = (self.state_t * 2) % 1.0
             pygame.draw.circle(surf, col, (x, y), int(R + 30 + k * 160), max(1, int(8 * (1 - k))))
 
-        # dönen dikenler
+        # rotating spikes
         n = 10
         spike = 26 + 10 * (self.phase - 1)
         rot = self.t * (0.6 + 0.5 * self.phase)
@@ -773,7 +773,7 @@ class Boss:
             a = -self.t * 1.5 + i * math.tau / 3
             pygame.draw.arc(surf, col, ring, a, a + 1.4, 5)
 
-        # göz
+        # eye
         eye_r = int(R * 0.5)
         windup = self.state == "windup"
         sclera = (235, 235, 245) if not windup else (255, 255, 255)

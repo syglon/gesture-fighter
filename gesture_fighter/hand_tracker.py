@@ -1,11 +1,11 @@
-"""Kamera + MediaPipe HandLandmarker'ı ayrı bir thread'de çalıştırır.
+"""Runs the camera and the MediaPipe HandLandmarker in a separate thread.
 
-Oyun döngüsü 60 FPS'te akarken el algılama ~20-30 FPS'te arka planda çalışır;
-oyun her karede sadece en son sonucu okur (snapshot), böylece oyun takılmaz.
+While the game loop runs at 60 FPS, hand detection runs in the background at ~20-30 FPS;
+the game only reads the latest result each frame (snapshot), so it never stalls.
 
-Slot mantığı:
-  * split=False (tek oyuncu): kameradaki en büyük (en yakın) el -> slot 0
-  * split=True  (iki oyuncu): görüntünün sol yarısındaki el -> slot 0, sağ yarısı -> slot 1
+Slot logic:
+  * split=False (one player): the largest (closest) hand in the image -> slot 0
+  * split=True  (two players): the hand in the left half of the image -> slot 0, right half -> slot 1
 """
 import os
 import sys
@@ -18,9 +18,9 @@ from pathlib import Path
 os.environ.setdefault("GLOG_minloglevel", "2")
 os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
 
-# mediapipe, tensorflow'u sadece doküman üretimi için opsiyonel olarak import ediyor.
-# Sistemde numpy 2 ile uyumsuz eski bir tensorflow kuruluysa bu import çöküyor;
-# tensorflow'u gizleyince mediapipe kendi yedek yoluna (ModuleNotFoundError) düşüyor.
+# mediapipe imports tensorflow optionally, only to generate its documentation.
+# If an old tensorflow that is incompatible with numpy 2 is installed, that import crashes;
+# hiding tensorflow makes mediapipe take its own fallback path (ModuleNotFoundError).
 if "tensorflow" not in sys.modules:
     sys.modules["tensorflow"] = None
 
@@ -33,18 +33,18 @@ MODEL_URL = ("https://storage.googleapis.com/mediapipe-models/hand_landmarker/"
              "hand_landmarker/float16/latest/hand_landmarker.task")
 MODEL_PATH = Path(__file__).resolve().parent.parent / "models" / "hand_landmarker.task"
 
-# El bu kadar algılama karesi boyunca görülmezse "kayıp" sayılır
+# A hand that is not seen for this many detection frames counts as lost
 LOST_AFTER = 4
 
 
 @dataclass
 class HandInfo:
-    gesture: Gesture       # filtrelenmiş (kararlı) hareket
-    raw: Gesture           # bu karedeki ham sınıflandırma
-    points: list           # 21 adet normalize (x, y) — çizim için
-    center: tuple          # avuç merkezi, normalize (x, y)
-    size: float            # elin görüntüdeki boyutu (yakınlık ölçüsü)
-    fingers: tuple         # (işaret, orta, yüzük, serçe) açık mı
+    gesture: Gesture       # filtered (stable) gesture
+    raw: Gesture           # raw classification in this frame
+    points: list           # 21 normalized (x, y) points — for drawing
+    center: tuple          # palm centre, normalized (x, y)
+    size: float            # size of the hand in the image (a measure of closeness)
+    fingers: tuple         # whether (index, middle, ring, little) are open
 
 
 def ensure_model():
@@ -74,7 +74,7 @@ class HandTracker:
         self._frame = None
         self._frame_id = 0
         self._hands = {}
-        # Her zaman 2 slot ayrılır; split ayarı oyun sırasında set_split() ile değişebilir
+        # Two slots are always allocated; the split setting can change during the game via set_split()
         self._filters = [GestureFilter() for _ in range(2)]
         self._last_seen = [None] * 2
         self._lost = [LOST_AFTER] * 2
@@ -83,7 +83,7 @@ class HandTracker:
 
     # ------------------------------------------------------------------
     def start(self):
-        """Kamerayı ve modeli açar. (başarılı_mı, mesaj) döndürür."""
+        """Opens the camera and the model. Returns (success, message)."""
         try:
             from mediapipe.tasks.python import BaseOptions, vision
         except Exception as e:  # pragma: no cover
@@ -123,7 +123,7 @@ class HandTracker:
         return 2 if self.split else 1
 
     def set_split(self, split):
-        """Tek oyuncu (en büyük el) / iki oyuncu (sol-sağ yarı) modları arasında geçiş."""
+        """Switch between one-player (largest hand) and two-player (left/right half) modes."""
         with self._lock:
             self.split = split
             for f in self._filters:
@@ -145,7 +145,7 @@ class HandTracker:
                 pass
 
     def snapshot(self):
-        """(önizleme_rgb, {slot: HandInfo}, frame_id) döndürür."""
+        """Returns (preview_rgb, {slot: HandInfo}, frame_id)."""
         with self._lock:
             return self._frame, dict(self._hands), self._frame_id
 
@@ -194,7 +194,7 @@ class HandTracker:
 
     @staticmethod
     def _parse(lms, aspect):
-        # Mesafe/açı hesabı için eksenleri aynı ölçeğe getir (x ve z, genişliğe göre normalize)
+        # Bring the axes to the same scale for distances/angles (x and z are normalized by the width)
         pts3 = [(p.x * aspect, p.y, p.z * aspect) for p in lms]
         pts2 = [(p.x, p.y) for p in lms]
         raw = classify(pts3)
@@ -228,7 +228,7 @@ class HandTracker:
             else:
                 self._lost[slot] += 1
                 if self._lost[slot] < LOST_AFTER and self._last_seen[slot] is not None:
-                    # Kısa kayıplarda son bilinen eli koru (titremeyi önler)
+                    # Keep the last known hand during short dropouts (prevents flicker)
                     hands[slot] = self._last_seen[slot]
                 else:
                     filt.reset()

@@ -1,7 +1,7 @@
-"""Oyuncu girişi soyutlaması: kamera eli, klavye veya ikisi birden.
+"""Player input abstraction: the camera hand, the keyboard, or both.
 
-İki kişilik moda geçişte her oyuncuya ayrı bir controller verilir
-(ör. HandController(tracker, slot=0) ve HandController(tracker, slot=1)).
+In two-player mode every player gets their own controller
+(e.g. HandController(tracker, slot=0) and HandController(tracker, slot=1)).
 """
 from dataclasses import dataclass
 
@@ -14,8 +14,8 @@ from .gestures import Gesture
 @dataclass
 class ControlState:
     gesture: Gesture = Gesture.NONE
-    y: float | None = None       # 0 (üst) .. 1 (alt), None = konumu değiştirme
-    visible: bool = False        # kamera eli görüyor mu
+    y: float | None = None       # 0 (top) .. 1 (bottom), None = keep the current position
+    visible: bool = False        # whether the camera sees the hand
 
 
 def _remap(v, lo, hi):
@@ -48,7 +48,7 @@ KEYMAP_P1 = {
 }
 
 
-# İki kişilik modda klavye (kamerasız test için): P1 soldaki oyuncu, P2 sağdaki
+# Keyboard in two-player mode (for testing without a camera): P1 is the left player, P2 the right one
 KEYMAP_VS_P1 = {
     "gestures": {Gesture.FIST: (pygame.K_1,), Gesture.PALM: (pygame.K_2,),
                  Gesture.POINT: (pygame.K_3,), Gesture.PEACE: (pygame.K_4,), Gesture.MIRROR: (pygame.K_5,)},
@@ -65,9 +65,9 @@ KEYMAP_VS_P2 = {
 
 
 class KeyboardController:
-    """Kamera olmadan test/yedek: tuşa basılı tutmak = hareketi tutmak."""
+    """Fallback / testing without a camera: holding a key = holding the gesture."""
 
-    SPEED = 1.5  # normalize birim / sn
+    SPEED = 1.5  # normalized units per second
 
     def __init__(self, keymap=KEYMAP_P1):
         self.keymap = keymap
@@ -93,7 +93,7 @@ class KeyboardController:
 
 
 class CombinedController:
-    """Kamera eli varsa onu kullanır; klavyeye basılırsa klavye öncelikli olur."""
+    """Uses the camera hand when there is one; a pressed key always takes priority."""
 
     def __init__(self, hand=None, keyboard=None):
         self.hand = hand
@@ -108,5 +108,5 @@ class CombinedController:
         else:
             y = hs.y
             if y is not None:
-                self.keyboard.y = y  # klavyeye geçildiğinde zıplama olmasın
+                self.keyboard.y = y  # so the fighter does not jump when switching to the keyboard
         return ControlState(gesture, y, hs.visible)

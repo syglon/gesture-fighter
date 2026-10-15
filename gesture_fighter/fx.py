@@ -1,4 +1,4 @@
-"""Partiküller, uçan yazılar ve ekran sarsıntısı."""
+"""Particles, floating texts and screen shake."""
 import math
 import random
 
@@ -36,7 +36,7 @@ class Particles:
             p[0] += p[2] * dt
             p[1] += p[3] * dt
             alive.append(p)
-        self.items = alive[-700:]  # üst sınır: çok fazla parıltılı partikül FPS'i düşürür
+        self.items = alive[-700:]  # upper limit: too many glowing particles lower the FPS
 
     def draw(self, surf):
         for x, y, _, _, life, max_life, size, color, _, _, g in self.items:

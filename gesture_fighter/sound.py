@@ -1,4 +1,4 @@
-"""Ses efektleri ve arcade müzikleri numpy ile anında sentezlenir — harici ses dosyası gerekmez."""
+"""Sound effects and arcade music are synthesized with numpy at start-up — no audio files are needed."""
 import numpy as np
 import pygame
 
@@ -19,7 +19,7 @@ class SoundBank:
                 pygame.mixer.init(44100, -16, 2, 512)
             self.rate, _, self.channels = pygame.mixer.get_init()
             pygame.mixer.set_num_channels(24)
-            pygame.mixer.set_reserved(1)          # kanal 0 sadece müzik için
+            pygame.mixer.set_reserved(1)          # channel 0 is reserved for music
             self.music_ch = pygame.mixer.Channel(0)
             self._build()
             self._build_music()
@@ -27,9 +27,9 @@ class SoundBank:
         except Exception as e:
             print(f"[sound] Sound disabled: {e}")
 
-    # ------------------------------------------------------------------ müzik
+    # ------------------------------------------------------------------ music
     def play_music(self, name):
-        """Döngüde müzik çalar; aynı parça zaten çalıyorsa dokunmaz."""
+        """Plays a music track in a loop; does nothing if that track is already playing."""
         if not self.enabled or self.music_ch is None:
             return
         if name == self.current_music and self.music_ch.get_busy():
@@ -159,18 +159,18 @@ class SoundBank:
         d = 1.2
         self._make("roar", (self._sweep(70, 45, d, "saw") + 0.7 * self._noise(d, 30)) * self._env(d, 0.08, 2.5), 0.6)
 
-        # ayna: parlayan yükselen kristal sesi + çan
+        # mirror: a bright rising crystal sound + bell
         d = 0.7
         sig = sum(self._sweep(f0, f0 * 2, d, curve=0.6) / (i + 1) for i, f0 in enumerate((660, 990, 1320)))
         self._make("mirror_cast", (sig + 0.4 * self._sweep(2640, 2640, d)) * self._env(d, 0.01, 4), 0.4)
-        # ayna yansıması: tiz, metalik "ping"
+        # mirror reflection: a high metallic "ping"
         d = 0.35
         sig = sum(self._sweep(f0, f0 * 1.02, d) / (i + 1) for i, f0 in enumerate((1760, 2794, 3951)))
         self._make("mirror_hit", (sig + 0.3 * self._sweep(600, 2400, d, "square")) * self._env(d, 0.002, 12), 0.4)
 
-        # özel hazır: yükselen üçlü çan
+        # special ready: a rising three-note chime
         self._make("ready", self._melody([784, 1175, 1568], 0.07), 0.3)
-        # ölünce dağılma: parıldayan yükselen hışırtı
+        # dissolving on death: a shimmering rising whoosh
         d = 0.8
         self._make("dissolve", (0.5 * self._noise(d, 2) + 0.4 * self._sweep(300, 1800, d, curve=0.6))
                    * self._env(d, 0.02, 4), 0.3)
@@ -178,7 +178,7 @@ class SoundBank:
         self._make("win", self._melody([523, 659, 784, 1047, 784, 1047], 0.14), 0.4)
         self._make("lose", self._melody([440, 392, 349, 262], 0.28, wave="saw"), 0.35)
 
-    # ------------------------------------------------------------------ chiptune sentezi
+    # ------------------------------------------------------------------ chiptune synthesis
     @staticmethod
     def _midi(n):
         return 440.0 * 2 ** ((n - 69) / 12)
@@ -208,13 +208,13 @@ class SoundBank:
         if kind == "snare":
             d = 0.14
             return (0.8 * self._noise(d, 2) + 0.4 * self._sweep(190, 160, d)) * self._env(d, 0.001, 24)
-        d = 0.05  # hi-hat: tiz gürültü
+        d = 0.05  # hi-hat: high-pitched noise
         n = self._noise(d)
         hp = n - np.convolve(n, np.ones(6) / 6, mode="same")
         return hp * self._env(d, 0.001, 70)
 
     def _render(self, bpm, bars, chords, lead=True, drums=True, arp_wave="pulse"):
-        """chords: bar başına (kök midi, minör mü). 16'lık nota ızgarasında katmanları üst üste koyar."""
+        """chords: one (root midi note, is_minor) per bar. Layers the parts on a 16th-note grid."""
         step = 60.0 / bpm / 4
         total = int(self.rate * step * 16 * bars)
         buf = np.zeros(total)
@@ -232,16 +232,16 @@ class SoundBank:
             third = 3 if minor else 4
             tones = [root, root + third, root + 7, root + 12]
             base = b * 16
-            # bas: 8'lik notalarla kök / oktav
+            # bass: root / octave in eighth notes
             for k in range(8):
                 note = root - 12 + (12 if k % 2 else 0)
                 add(base + 2 * k, self._tone(self._midi(note), step * 1.8, "pulse", 0.5, 9), 0.20)
-            # arpej: 16'lıklar, iki oktav yukarıda
+            # arpeggio: sixteenth notes, two octaves up
             for k in range(16):
                 note = tones[[0, 1, 2, 3, 2, 1, 2, 3][k % 8]] + 24
                 add(base + k, self._tone(self._midi(note), step * 0.9, arp_wave, 0.25, 16), 0.07)
             if lead:
-                # melodi: akor seslerinden kurulan motif, ikinci yarıda varyasyon
+                # melody: a motif built from chord tones, varied in the second half
                 motif = [2, 1, 0, 1, 2, 3, 2] if b < bars // 2 else [3, 2, 1, 2, 0, 1, 3]
                 starts = [0, 3, 6, 8, 10, 12, 14]
                 for j, (st, idx) in enumerate(zip(starts, motif)):
