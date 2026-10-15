@@ -185,7 +185,7 @@ Camera frame ──► MediaPipe Hand Landmarker ──► 21 landmarks ──�
   least reliable finger.
 - **Filtering:** a majority vote over the last 4 frames removes single-frame errors.
 - **Sound and music** are synthesised with NumPy when the game starts — there are no audio files. The menu plays
-  a calm chiptune track and fights play a faster one.
+  an upbeat platformer-style chiptune theme and fights play a faster, more intense one.
 
 ## 7. Project structure
 

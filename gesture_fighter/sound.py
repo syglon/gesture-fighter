@@ -5,7 +5,7 @@ import pygame
 
 class SoundBank:
     MUSIC_VOLUME = 0.35
-    MUSIC_VOLUMES = {"menu": 0.2, "battle": 0.35}  # the calm menu track plays quieter
+    MUSIC_VOLUMES = {"menu": 0.3, "battle": 0.35}
 
     def __init__(self, enabled=True):
         self.sounds = {}
@@ -258,23 +258,10 @@ class SoundBank:
                     add(base + k, hat, 0.10 if k % 4 else 0.06)
         return buf
 
-    def _soft(self, freq, dur, wave="tri", attack=0.02, release=0.2, decay=0.8):
-        """A soft note: slow attack, gentle decay and a long release (for the calm menu track)."""
-        n = max(1, int(self.rate * dur))
-        t = np.arange(n) / self.rate
-        ph = (freq * t) % 1.0
-        sig = 4 * np.abs(ph - 0.5) - 1 if wave == "tri" else np.sin(2 * np.pi * ph)
-        env = np.exp(-t * decay)
-        a = min(n, int(self.rate * attack))
-        env[:a] *= np.linspace(0, 1, a)
-        r = min(n, int(self.rate * release))
-        env[-r:] *= np.linspace(1, 0, r)
-        return sig * env
-
     def _render_menu(self):
-        """Calm menu track: 88 BPM, Fmaj7 - Em7 - Dm7 - Cmaj7, soft pad, sine bass, slow arpeggio and a
-        sparse melody. No drums, a gentle echo and a low-pass filter keep it easy on the ears."""
-        bpm, bars = 88, 8
+        """Upbeat platformer-style menu theme (original melody): 144 BPM in C major, a bouncy staccato
+        NES-style lead, an "oom-pah" bass (root on beats 1 and 3, chord stabs on 2 and 4) and light drums."""
+        bpm, bars = 144, 8
         step = 60.0 / bpm / 4
         total = int(self.rate * step * 16 * bars)
         buf = np.zeros(total)
@@ -284,36 +271,42 @@ class SoundBank:
             seg = sig[: max(0, total - i)]
             buf[i:i + len(seg)] += seg * vol
 
-        maj7, min7, dom7 = [0, 4, 7, 11], [0, 3, 7, 10], [0, 4, 7, 10]
-        chords = [(53, maj7), (52, min7), (50, min7), (48, maj7),
-                  (53, maj7), (52, min7), (50, min7), (55, dom7)]
-        # (bar, step, midi note, length in 16th steps) — C major pentatonic melody
-        melody = [(0, 0, 69, 4), (0, 4, 72, 4), (0, 8, 76, 6), (0, 14, 74, 2),
-                  (1, 0, 76, 8), (1, 8, 67, 4), (1, 12, 69, 4),
-                  (2, 0, 74, 4), (2, 4, 76, 4), (2, 8, 69, 8),
-                  (3, 0, 67, 8), (3, 8, 64, 8),
-                  (4, 0, 69, 2), (4, 2, 72, 2), (4, 4, 76, 4), (4, 8, 79, 6), (4, 14, 76, 2),
-                  (5, 0, 74, 4), (5, 4, 76, 4), (5, 8, 67, 8),
-                  (6, 0, 69, 4), (6, 4, 74, 4), (6, 8, 76, 4), (6, 12, 74, 4),
-                  (7, 0, 74, 12)]
-        bar_len = step * 16
+        major, minor = [0, 4, 7], [0, 3, 7]
+        # (root midi note, chord shape) per bar: C - Am - F - G - C - F - G - C
+        chords = [(48, major), (45, minor), (41, major), (43, major),
+                  (48, major), (41, major), (43, major), (48, major)]
+        # (bar, step, midi note, length in 16th steps)
+        melody = [(0, 0, 72, 2), (0, 2, 76, 2), (0, 4, 79, 2), (0, 6, 76, 2), (0, 8, 79, 3), (0, 12, 84, 4),
+                  (1, 0, 81, 2), (1, 2, 79, 2), (1, 4, 76, 2), (1, 6, 72, 2), (1, 8, 76, 2), (1, 12, 69, 4),
+                  (2, 0, 77, 2), (2, 2, 81, 2), (2, 4, 77, 2), (2, 6, 72, 2), (2, 8, 74, 2), (2, 10, 77, 2),
+                  (2, 12, 81, 4),
+                  (3, 0, 79, 3), (3, 3, 77, 1), (3, 4, 76, 2), (3, 6, 74, 2), (3, 8, 71, 4), (3, 12, 67, 4),
+                  (4, 0, 72, 2), (4, 2, 76, 2), (4, 4, 79, 2), (4, 6, 84, 2), (4, 8, 83, 2), (4, 10, 79, 2),
+                  (4, 12, 76, 4),
+                  (5, 0, 77, 2), (5, 2, 76, 2), (5, 4, 74, 2), (5, 6, 72, 2), (5, 8, 69, 2), (5, 10, 72, 2),
+                  (5, 12, 77, 4),
+                  (6, 0, 79, 2), (6, 2, 81, 2), (6, 4, 83, 2), (6, 6, 86, 2), (6, 8, 83, 2), (6, 10, 79, 2),
+                  (6, 12, 74, 4),
+                  (7, 0, 84, 4), (7, 4, 79, 2), (7, 6, 76, 2), (7, 8, 72, 8)]
+        kick, snare, hat = self._drum("kick"), self._drum("snare"), self._drum("hat")
         for b, (root, shape) in enumerate(chords):
             base = b * 16
-            for iv in shape[:3]:  # pad: the chord held for the whole bar
-                add(base, self._soft(self._midi(root + iv), bar_len, "tri", 0.25, 0.4, 0.3), 0.035)
-            for k in (0, 8):  # bass on beats 1 and 3
-                add(base + k, self._soft(self._midi(root - 12), step * 7.5, "sine", 0.01, 0.15, 1.5), 0.22)
-            for k in range(8):  # slow arpeggio in eighth notes
-                note = root + 12 + shape[[0, 1, 2, 3, 2, 1, 2, 3][k]]
-                add(base + 2 * k, self._soft(self._midi(note), step * 1.9, "tri", 0.01, 0.1, 5), 0.03)
-        for b, st, note, ln in melody:
-            add(b * 16 + st, self._soft(self._midi(note), step * ln * 0.95, "sine", 0.03, 0.15, 1.2), 0.09)
-        # gentle echo (3/8 of a bar later) and a low-pass to round off the edges
-        d = int(self.rate * step * 6)
-        echo = np.zeros_like(buf)
-        echo[d:] = buf[:-d] * 0.28
-        buf = buf + echo
-        return np.convolve(buf, np.ones(9) / 9, mode="same")
+            # oom-pah: bass root / fifth on beats 1 and 3, short chord stabs on beats 2 and 4
+            add(base, self._tone(self._midi(root - 12), step * 3, "tri", decay=6), 0.30)
+            add(base + 8, self._tone(self._midi(root - 5), step * 3, "tri", decay=6), 0.28)
+            for k in (4, 12):
+                for iv in shape:
+                    add(base + k, self._tone(self._midi(root + 12 + iv), step * 1.5, "pulse", 0.25, 14), 0.035)
+            add(base, kick, 0.30)
+            add(base + 8, kick, 0.22)
+            for k in (4, 12):
+                add(base + k, snare, 0.14)
+            for k in range(2, 16, 4):  # off-beat hi-hats
+                add(base + k, hat, 0.05)
+        for b, st, note, ln in melody:  # staccato lead: notes are cut short for a bouncy feel
+            add(b * 16 + st, self._tone(self._midi(note), step * ln * 0.7, "pulse", 0.25, 5), 0.10)
+            add(b * 16 + st, self._tone(self._midi(note + 12), step * ln * 0.5, "tri", decay=9), 0.025)
+        return buf
 
     def _build_music(self):
         am, f, c, g, e = (45, True), (41, False), (48, False), (43, False), (40, False)
@@ -321,7 +314,7 @@ class SoundBank:
         menu = self._render_menu()
         for name, sig in (("battle", battle), ("menu", menu)):
             peak = np.max(np.abs(sig)) or 1.0
-            data = (sig / peak * (0.8 if name == "battle" else 0.6) * 32767).astype(np.int16)
+            data = (sig / peak * 0.8 * 32767).astype(np.int16)
             if self.channels == 2:
                 data = np.ascontiguousarray(np.column_stack([data, data]))
             self.music[name] = pygame.sndarray.make_sound(data)
