@@ -332,7 +332,7 @@ class Game:
     # ================================================================== update
     def update(self, dt):
         if self.options.open:
-            self.options.update(dt, self.controls[0])
+            self.options.update(dt)
             return
         if self.paused:
             return
@@ -344,9 +344,6 @@ class Game:
                 self.start_match("solo")
             elif self.hold_confirm("versus", g is Gesture.PEACE, dt, 1.2, 0.5):
                 self.start_match("versus")
-            elif self.hold_confirm("options", g is Gesture.POINT, dt, 1.0, 0.5):
-                self.holds["options"] = 0.0
-                self.options.show()
         elif self.state == "countdown":
             prev = int(self.state_t - dt)
             self.update_idle_actors(dt)
@@ -1430,12 +1427,8 @@ class Game:
             text(s, f.tiny, f"{sub}  ·  {how}key {k}", (r.x + 73, r.y + 40), (190, 190, 210), "topleft", shadow=False)
             if prog > 0:
                 pygame.draw.rect(s, col, (r.x + 6, r.bottom - 7, int((r.w - 12) * prog), 4))
-        how = "hold ☝ or press O" if self.tracker else "press O"
-        text(s, f.tiny, f"OPTIONS: {how}    Boss: ◀ {self.difficulty.upper()} ▶    F: fullscreen / window    ESC: quit",
+        text(s, f.tiny, f"O: options    Boss: ◀ {self.difficulty.upper()} ▶    F: fullscreen / window    ESC: quit",
              (W // 2, y + 82), (190, 190, 210))
-        prog = self.holds.get("options", 0.0)
-        if prog > 0:
-            pygame.draw.rect(s, GESTURE_COLOR[Gesture.POINT], (W // 2 - 200, y + 96, int(400 * prog), 4))
         tip = TIPS[int(t / 4) % len(TIPS)]
         text(s, f.small, "TIP: " + tip, (W // 2, y + 112), (255, 220, 140))
         self.draw_legend(H - 52)

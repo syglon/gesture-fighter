@@ -96,7 +96,7 @@ Hold your hand in front of the camera with the palm facing it, about 50–80 cm 
 | Main menu → 2 Players | hold ✌️ two fingers for 1 second | `V` |
 | End screen → play again | hold 🖐️ open palm for 1 second | `SPACE` / `ENTER` / `R` |
 | End screen → main menu | — | `ESC` |
-| Main menu → Options | hold ☝️ index finger for 1 second | `O` (also `O` on the pause screen) |
+| Main menu → Options | — (keyboard only) | `O` (also `O` on the pause screen) |
 
 ### 3.3 Keyboard (fallback without a camera, or to test)
 
@@ -121,7 +121,8 @@ Holding a key is the same as holding the gesture.
 
 ### 3.5 Options menu
 
-Open it from the main menu (hold ☝️ for 1 second or press `O`) or from the pause screen (`O`).
+Open it with `O` from the main menu or from the pause screen. The options menu is controlled with the
+**keyboard only**; hand gestures are ignored while it is open.
 
 | Setting | Values |
 |---|---|
@@ -132,9 +133,7 @@ Open it from the main menu (hold ☝️ for 1 second or press `O`) or from the p
 | Screen shake | On / Off |
 | Versus round time | 30 / 60 / 90 seconds (applies from the next round) |
 
-- **With the hand:** move your hand up or down to select a row, make a ✊ fist to decrease, show ☝️ the index
-  finger to increase, and hold 🖐️ an open palm for 1 second to go back.
-- **With the keyboard:** `↑` `↓` select, `←` `→` change, `Enter` changes too, `Esc` or `O` goes back.
+- `↑` `↓` (or `W` `S`) select a row, `←` `→` (or `A` `D`) change it, `Enter` changes it too, `Esc` or `O` goes back.
 - Settings are saved to `settings.json` next to `webcam_game.py` and are restored the next time the game starts.
 
 ## 4. Game modes

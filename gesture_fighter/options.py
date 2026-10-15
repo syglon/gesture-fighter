@@ -1,8 +1,7 @@
 """Options menu and saved settings.
 
-The menu opens from the main menu (key O or hold the index finger) and from the pause screen (key O).
-It can be used with the hand (move the hand up/down to select, fist = decrease, index finger = increase,
-hold an open palm to go back) or with the keyboard (arrows / WASD, Enter, Esc).
+The menu opens with the O key from the main menu and from the pause screen. It is controlled with the
+keyboard only (arrows / WASD, Enter, Esc); hand gestures are ignored while it is open.
 Settings are saved to settings.json next to webcam_game.py and loaded on the next start.
 """
 import json
@@ -12,8 +11,7 @@ from pathlib import Path
 import pygame
 
 from . import config as C
-from .draw import blit_glow, gesture_icon, panel, scale_color, text
-from .gestures import GESTURE_COLOR, Gesture
+from .draw import blit_glow, panel, scale_color, text
 
 SETTINGS_PATH = Path(__file__).resolve().parent.parent / "settings.json"
 DIFFS = ["easy", "normal", "hard"]
@@ -57,15 +55,10 @@ ROWS = [("music", "Music volume"), ("sfx", "Sound effects volume"), ("fullscreen
 
 
 class OptionsMenu:
-    HOLD_TIME = 1.0  # seconds of open palm to leave the menu
-
     def __init__(self, game):
         self.game = game
         self.open = False
         self.sel = 0
-        self.prev_gesture = Gesture.NONE
-        self.hold = 0.0
-        self.armed = False
         self.t = 0.0
 
     @property
@@ -76,19 +69,15 @@ class OptionsMenu:
     def show(self):
         self.open = True
         self.sel = 0
-        self.hold = 0.0
-        self.armed = False
         self.t = 0.0
-        # a gesture that is still held when the menu opens must not change a setting right away
-        self.prev_gesture = self.game.controls[0].gesture if self.game.controls else Gesture.NONE
         self.game.sound.play("blip")
 
     def close(self):
         self.open = False
         save_settings(self.settings)
         self.game.sound.play("blip")
-        # the palm used to close the menu is probably still up: the menu screens must see it released
-        # first, or the main menu would start a 1-player game from the same hold
+        # a hand that is already held up (e.g. an open palm) must be released before the menu screens
+        # react to it, or the main menu could start a game right after the options close
         self.game.armed = set()
         self.game.holds = {}
 
@@ -135,32 +124,9 @@ class OptionsMenu:
         elif k in (pygame.K_RIGHT, pygame.K_d, pygame.K_RETURN, pygame.K_SPACE):
             self.change(self.sel, +1)
 
-    def update(self, dt, ctrl):
-        """Hand control: height selects a row, fist = decrease, index finger = increase, hold palm = back."""
+    def update(self, dt):
+        """Only animates the menu; all input comes from key() (gestures are ignored here)."""
         self.t += dt
-        g = ctrl.gesture
-        if ctrl.visible and ctrl.y is not None:
-            pos = ctrl.y * len(ROWS)  # with hysteresis, so a shaky hand does not jump between rows
-            if abs(pos - (self.sel + 0.5)) > 0.75:
-                new = max(0, min(len(ROWS) - 1, int(pos)))
-                if new != self.sel:
-                    self.sel = new
-                    self.game.sound.play("blip", 0.4)
-        entered = g is not self.prev_gesture
-        self.prev_gesture = g
-        if entered and g is Gesture.FIST:
-            self.change(self.sel, -1)
-        elif entered and g is Gesture.POINT:
-            self.change(self.sel, +1)
-        if not self.open:
-            return
-        if g is not Gesture.PALM:
-            self.armed = True
-            self.hold = max(0.0, self.hold - dt * 2)
-        elif self.armed:
-            self.hold += dt / self.HOLD_TIME
-            if self.hold >= 1.0:
-                self.close()
 
     # ------------------------------------------------------------------ drawing
     def value_text(self, key):
@@ -212,18 +178,6 @@ class OptionsMenu:
                 col = C.C_SPECIAL if sel else (230, 230, 245)
                 text(surf, f.small, f"◀  {val}  ▶" if sel else val, (vx, rr.centery), col, "midright")
 
-        # hints: hand gestures and keyboard
-        hy = r.bottom - 58
-        items = [(None, "hand up/down: select"), (Gesture.FIST, "decrease"), (Gesture.POINT, "increase"),
-                 (Gesture.PALM, "hold: back")]
-        x = r.x + 40
-        for gest, words in items:
-            if gest is not None:
-                gesture_icon(surf, gest, (x + 12, hy + 2), 24, GESTURE_COLOR[gest])
-                x += 30
-            img_rect = text(surf, f.tiny, words, (x, hy), (200, 200, 220), "midleft", shadow=False)
-            x = img_rect.right + 26
-        text(surf, f.tiny, "Keyboard: ↑ ↓ select    ← → change    Enter: change    Esc / O: back",
-             (r.centerx, hy + 30), (170, 170, 195), shadow=False)
-        if self.hold > 0:
-            pygame.draw.rect(surf, C.C_SHIELD, (r.x + 40, r.bottom - 14, int((r.w - 80) * self.hold), 5))
+        # keyboard hints
+        text(surf, f.small, "↑ ↓  select      ← →  change      Enter  change      Esc / O  back",
+             (r.centerx, r.bottom - 42), (200, 200, 220), shadow=False)
