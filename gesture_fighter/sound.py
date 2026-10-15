@@ -41,8 +41,10 @@ class SoundBank:
         if track is None:
             return
         self.current_music = name
-        self.music_ch.play(track, loops=-1, fade_ms=700)
+        # The volume must be set BEFORE play(): a fade-in ends at the volume the channel had when it
+        # started, so a volume set afterwards is overwritten (the track would end up at full volume).
         self.music_ch.set_volume(self.MUSIC_VOLUMES.get(name, self.MUSIC_VOLUME) * self.music_volume)
+        self.music_ch.play(track, loops=-1, fade_ms=700)
 
     def set_volumes(self, music, sfx):
         """Music and sound-effect volumes (0..1); the playing track changes immediately."""
