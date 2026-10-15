@@ -13,6 +13,8 @@ class SoundBank:
         self.enabled = False
         self.current_music = None
         self.music_ch = None
+        self.music_volume = 1.0  # 0..1, set from the options menu
+        self.sfx_volume = 1.0
         if not enabled:
             return
         try:
@@ -40,7 +42,13 @@ class SoundBank:
             return
         self.current_music = name
         self.music_ch.play(track, loops=-1, fade_ms=700)
-        self.music_ch.set_volume(self.MUSIC_VOLUMES.get(name, self.MUSIC_VOLUME))
+        self.music_ch.set_volume(self.MUSIC_VOLUMES.get(name, self.MUSIC_VOLUME) * self.music_volume)
+
+    def set_volumes(self, music, sfx):
+        """Music and sound-effect volumes (0..1); the playing track changes immediately."""
+        self.music_volume, self.sfx_volume = music, sfx
+        if self.music_ch is not None and self.current_music:
+            self.music_ch.set_volume(self.MUSIC_VOLUMES.get(self.current_music, self.MUSIC_VOLUME) * music)
 
     def stop_music(self):
         if self.music_ch is not None:
@@ -56,13 +64,13 @@ class SoundBank:
             self.music_ch.unpause()
 
     def play(self, name, volume=1.0):
-        if not self.enabled:
+        if not self.enabled or self.sfx_volume <= 0:
             return
         s = self.sounds.get(name)
         if s is not None:
             ch = s.play()
             if ch is not None:
-                ch.set_volume(volume)
+                ch.set_volume(volume * self.sfx_volume)
 
     # ------------------------------------------------------------------
     def _t(self, dur):

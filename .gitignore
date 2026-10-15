@@ -5,3 +5,5 @@ __pycache__/
 models/
 *.part
 *.zip
+# Saved options (created by the game)
+settings.json

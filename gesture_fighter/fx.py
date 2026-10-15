@@ -72,8 +72,11 @@ class FloatingText:
 class Shake:
     def __init__(self):
         self.amount = 0.0
+        self.enabled = True  # turned off from the options menu
 
     def add(self, amount):
+        if not self.enabled:
+            return
         self.amount = min(30.0, max(self.amount, amount))
 
     def update(self, dt):

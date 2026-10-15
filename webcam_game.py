@@ -25,7 +25,8 @@ def parse_args(argv=None):
     ap = argparse.ArgumentParser(description="Gesture Fighter — a fighting game controlled by hand gestures (ME461)")
     ap.add_argument("--camera", type=int, default=0, help="camera index (default 0)")
     ap.add_argument("--keyboard", action="store_true", help="do not use the camera, keyboard only")
-    ap.add_argument("--difficulty", choices=["easy", "normal", "hard"], default="normal", help="boss difficulty")
+    ap.add_argument("--difficulty", choices=["easy", "normal", "hard"], default=None,
+                    help="boss difficulty (default: the one saved in the options menu, normal at first)")
     ap.add_argument("--versus", action="store_true", help="start a 2-player versus match directly")
     ap.add_argument("--windowed", action="store_true", help="start in a window instead of fullscreen (F toggles it)")
     ap.add_argument("--mute", action="store_true", help="no sound or music")

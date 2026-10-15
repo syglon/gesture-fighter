@@ -60,7 +60,7 @@ In windowed mode the window is shrunk automatically on screens smaller than 1280
 | Option | Effect |
 |---|---|
 | `--versus` | Skip the menu and start a 2-player match |
-| `--difficulty easy\|normal\|hard` | Boss difficulty (default `normal`; also changeable in the menu with ◀ ▶) |
+| `--difficulty easy\|normal\|hard` | Boss difficulty for this run (otherwise the one saved in the options menu) |
 | `--camera N` | Use camera number N (default 0) |
 | `--keyboard` | Do not use the camera; play with the keyboard only |
 | `--windowed` | Start in a 1280×720 window instead of fullscreen |
@@ -96,6 +96,7 @@ Hold your hand in front of the camera with the palm facing it, about 50–80 cm 
 | Main menu → 2 Players | hold ✌️ two fingers for 1 second | `V` |
 | End screen → play again | hold 🖐️ open palm for 1 second | `SPACE` / `ENTER` / `R` |
 | End screen → main menu | — | `ESC` |
+| Main menu → Options | hold ☝️ index finger for 1 second | `O` (also `O` on the pause screen) |
 
 ### 3.3 Keyboard (fallback without a camera, or to test)
 
@@ -116,6 +117,25 @@ Holding a key is the same as holding the gesture.
 | `F` (or `F11`) | Switch between fullscreen and a window |
 | `M` | Mute / unmute sound and music |
 | `◀` `▶` (or `A` `D`) | Change boss difficulty in the main menu |
+| `O` | Open the options menu (main menu or pause screen) |
+
+### 3.5 Options menu
+
+Open it from the main menu (hold ☝️ for 1 second or press `O`) or from the pause screen (`O`).
+
+| Setting | Values |
+|---|---|
+| Music volume | 0–100 % in steps of 10 |
+| Sound effects volume | 0–100 % in steps of 10 |
+| Display | Fullscreen / Window |
+| Boss difficulty | Easy / Normal / Hard (applies from the next fight) |
+| Screen shake | On / Off |
+| Versus round time | 30 / 60 / 90 seconds (applies from the next round) |
+
+- **With the hand:** move your hand up or down to select a row, make a ✊ fist to decrease, show ☝️ the index
+  finger to increase, and hold 🖐️ an open palm for 1 second to go back.
+- **With the keyboard:** `↑` `↓` select, `←` `→` change, `Enter` changes too, `Esc` or `O` goes back.
+- Settings are saved to `settings.json` next to `webcam_game.py` and are restored the next time the game starts.
 
 ## 4. Game modes
 
@@ -201,6 +221,7 @@ gesture_fighter/
   controls.py             hand / keyboard input → one ControlState per player
   entities.py             fighter (poses, death animation), boss, projectiles, lasers, beam, mirror
   game.py                 main loop, menus, rounds, combat rules, collisions, HUD
+  options.py              options menu and saved settings (settings.json)
   fx.py, draw.py          particles, screen shake, drawing helpers
   sound.py                synthesised sound effects and chiptune music
 ```

@@ -21,6 +21,7 @@ from .draw import (Fonts, bar, blit_glow, build_background, gesture_icon, lerp, 
 from .entities import Boss, Fighter, Mirror, Projectile, SpecialBeam, circle_rect_hit
 from .fx import FloatingText, Particles, Shake
 from .gestures import GESTURE_ACTION, GESTURE_COLOR, GESTURE_HAND, HAND_CONNECTIONS, Gesture
+from .options import OptionsMenu, load_settings, save_settings
 
 W, H = C.SCREEN_W, C.SCREEN_H
 LEGEND = [Gesture.FIST, Gesture.PALM, Gesture.POINT, Gesture.PEACE]
@@ -58,10 +59,14 @@ class Game:
         os.environ.setdefault("SDL_RENDER_SCALE_QUALITY", "linear")
         pygame.mixer.pre_init(44100, -16, 2, 512)
         pygame.init()
+        # Saved settings (options menu); a --difficulty given on the command line wins for this run
+        self.settings = load_settings()
+        if args.difficulty:
+            self.settings["difficulty"] = args.difficulty
         # The game opens in fullscreen. pygame.SCALED draws everything on a fixed 1280x720 canvas and scales
         # it to the monitor's own resolution, keeping the aspect ratio (black bars on non-16:9 screens),
         # so any resolution works without changing the display mode. F toggles a window.
-        self.fullscreen = not args.windowed
+        self.fullscreen = self.settings["fullscreen"] and not args.windowed
         flags = pygame.SCALED | (pygame.FULLSCREEN if self.fullscreen else 0)
         self.screen = pygame.display.set_mode((W, H), flags)
         self.fit_window()
@@ -70,7 +75,7 @@ class Game:
         self.fonts = Fonts()
         from .sound import SoundBank
         self.sound = SoundBank(enabled=not args.mute)
-        self.difficulty = args.difficulty
+        self.difficulty = self.settings["difficulty"]
 
         self.tracker = None
         self.camera_msg = "Keyboard mode (--keyboard)"
@@ -95,6 +100,8 @@ class Game:
 
         self.particles = Particles()
         self.shake = Shake()
+        self.options = OptionsMenu(self)
+        self.apply_settings()
         self.set_mode("solo")
         self.new_match()
         self.boss.x = self.boss.home_x
@@ -160,7 +167,7 @@ class Game:
         self.texts = []
         self.particles.clear()
         self.fight_time = 0.0
-        self.round_timer = float(C.VS_ROUND_TIME)
+        self.round_timer = float(self.settings["round_time"])
         self.slowmo = 0.0
         self.hitstop = 0.0
         self.red_flash = 0.0
@@ -214,6 +221,8 @@ class Game:
                         self.sound.play_music(self.music_for_state())
                     else:
                         self.sound.stop_music()
+                elif self.options.open:
+                    self.options.key(k)
                 elif self.state == "title":
                     if k == pygame.K_ESCAPE:
                         self.running = False
@@ -221,10 +230,13 @@ class Game:
                         self.start_match("solo")
                     elif k == pygame.K_v:
                         self.start_match("versus")
+                    elif k == pygame.K_o:
+                        self.options.show()
                     elif k in (pygame.K_LEFT, pygame.K_RIGHT, pygame.K_a, pygame.K_d):
                         step = -1 if k in (pygame.K_LEFT, pygame.K_a) else 1
-                        i = (DIFFS.index(self.difficulty) + step) % len(DIFFS)
-                        self.difficulty = DIFFS[i]
+                        self.settings["difficulty"] = DIFFS[(DIFFS.index(self.difficulty) + step) % len(DIFFS)]
+                        self.apply_settings()
+                        save_settings(self.settings)
                         self.sound.play("blip")
                 elif self.state in ("fight", "countdown", "round_end"):
                     if k in (pygame.K_ESCAPE, pygame.K_p):
@@ -232,6 +244,8 @@ class Game:
                         self.sound.pause_music(self.paused)
                     elif k == pygame.K_q and self.paused:
                         self.go_title()
+                    elif k == pygame.K_o and self.paused:
+                        self.options.show()
                 elif self.state in ("victory", "defeat", "match_end"):
                     if k in (pygame.K_SPACE, pygame.K_RETURN, pygame.K_r):
                         self.start_match(self.mode)
@@ -253,6 +267,17 @@ class Game:
                 self.fullscreen = not self.fullscreen
                 print(f"[game] Could not switch fullscreen mode: {e}")
         self.fit_window()
+        self.settings["fullscreen"] = self.fullscreen
+        save_settings(self.settings)
+
+    def apply_settings(self):
+        """Push the current settings to the sound, the screen shake and the boss difficulty."""
+        s = self.settings
+        self.sound.set_volumes(s["music"] / 10, s["sfx"] / 10)
+        self.shake.enabled = s["shake"]
+        if not s["shake"]:
+            self.shake.amount = 0.0
+        self.difficulty = s["difficulty"]  # used from the next fight on
 
     def fit_window(self):
         """In windowed mode, shrink the window on screens too small for 1280x720 and centre it."""
@@ -306,6 +331,9 @@ class Game:
 
     # ================================================================== update
     def update(self, dt):
+        if self.options.open:
+            self.options.update(dt, self.controls[0])
+            return
         if self.paused:
             return
         self.state_t += dt
@@ -316,6 +344,9 @@ class Game:
                 self.start_match("solo")
             elif self.hold_confirm("versus", g is Gesture.PEACE, dt, 1.2, 0.5):
                 self.start_match("versus")
+            elif self.hold_confirm("options", g is Gesture.POINT, dt, 1.0, 0.5):
+                self.holds["options"] = 0.0
+                self.options.show()
         elif self.state == "countdown":
             prev = int(self.state_t - dt)
             self.update_idle_actors(dt)
@@ -1118,6 +1149,8 @@ class Game:
         self.draw_banner()
         if self.paused:
             self.draw_pause()
+        if self.options.open:
+            self.options.draw(self.screen)
         if self.debug:
             self.draw_debug()
 
@@ -1397,8 +1430,12 @@ class Game:
             text(s, f.tiny, f"{sub}  ·  {how}key {k}", (r.x + 73, r.y + 40), (190, 190, 210), "topleft", shadow=False)
             if prog > 0:
                 pygame.draw.rect(s, col, (r.x + 6, r.bottom - 7, int((r.w - 12) * prog), 4))
-        text(s, f.tiny, f"Boss difficulty: ◀ {self.difficulty.upper()} ▶    F: fullscreen / window    ESC: quit",
+        how = "hold ☝ or press O" if self.tracker else "press O"
+        text(s, f.tiny, f"OPTIONS: {how}    Boss: ◀ {self.difficulty.upper()} ▶    F: fullscreen / window    ESC: quit",
              (W // 2, y + 82), (190, 190, 210))
+        prog = self.holds.get("options", 0.0)
+        if prog > 0:
+            pygame.draw.rect(s, GESTURE_COLOR[Gesture.POINT], (W // 2 - 200, y + 96, int(400 * prog), 4))
         tip = TIPS[int(t / 4) % len(TIPS)]
         text(s, f.small, "TIP: " + tip, (W // 2, y + 112), (255, 220, 140))
         self.draw_legend(H - 52)
@@ -1527,7 +1564,7 @@ class Game:
         ov.fill((0, 0, 0, 160))
         self.screen.blit(ov, (0, 0))
         text(self.screen, self.fonts.big, "PAUSED", (W // 2, H // 2 - 30), C.WHITE)
-        text(self.screen, self.fonts.small, "ESC / P: resume      Q: main menu      F: fullscreen / window",
+        text(self.screen, self.fonts.small, "ESC / P: resume      O: options      Q: main menu      F: fullscreen / window",
              (W // 2, H // 2 + 30), (200, 200, 220))
 
     def draw_debug(self):
